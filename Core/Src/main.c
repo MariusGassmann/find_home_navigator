@@ -1,7 +1,7 @@
 /* USER CODE BEGIN Header */
 /**
  * @file main.c
- * @brief STTS22H Driver Testbench
+ * @brief Find Home IMU diagnostics
  * @author Philipp Schilk, 2023
  */
 /* USER CODE END Header */
@@ -10,8 +10,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "stts22h_driver.h"
-#include <inttypes.h>
+#include "imu_test.h"
 #include <stdio.h>
 /* USER CODE END Includes */
 
@@ -45,8 +44,6 @@ static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_I2C1_Init(void);
 /* USER CODE BEGIN PFP */
-void test_driver(void);
-void wait_for_button_press(void);
 
 /* USER CODE END PFP */
 
@@ -69,7 +66,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-hnm  HAL_Init();
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -88,7 +85,7 @@ hnm  HAL_Init();
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
-  test_driver();
+  imu_test_run();
 
   /* USER CODE END 2 */
 
@@ -284,144 +281,6 @@ static void MX_GPIO_Init(void)
 
 /* USER CODE BEGIN 4 */
 
-void test_driver(void) {
-
-  printf("Press enter button to test sensor communication...\r\n");
-  wait_for_button_press();
-
-  // ==== 1: Check if communication is OK ====
-
-  // TODO: Call your completed stts22h_check_communication() function.
-  //       If it returns an error, print an error message using printf and
-  //       call the Error_Handler() function. Otherwise print a confirmation
-  //       message that the sensor communication is OK.
-  if (stts22h_check_communication() != STTS22H_OK) {
-    printf("ERROR: Communication with sensor failed!\r\n");
-    Error_Handler();
-  } else {
-    printf("Communication with sensor is OK!\r\n");
-  }
-
-  printf("Press enter button to test free-run mode...\r\n");
-  wait_for_button_press();
-
-  // ==== 2: Configure in free-run mode ====
-  // TODO: Call your completed stts22h_configure() function to put the
-  //       temperature sensor into free-run mode at an output data rate of 25Hz.
-  //       If it returns an error, print an error message using printf and
-  //       call the Error_Handler() function. Otherwise print a confirmation
-  //       message that the sensor was configured correctly.
-  if (stts22h_configure(STTS22H_MODE_FREERUN_25HZ) != STTS22H_OK) {
-    printf("ERROR: Failed to configure sensor in free-run mode!\r\n");
-    Error_Handler();
-  } else {
-    printf("Sensor configured in free-run mode at 25Hz!\r\n");
-  }
-  HAL_Delay(100);
-
-  // ==== 3: Read temperature 20 times ====
-  for (unsigned int i = 0; i < 20; i++) {
-    HAL_Delay(500);
-
-    int16_t temp_centidegree = 0;
-    // TODO: Use your stts22h_read_temp() function to retrieve the
-    //       latest temperature measurement from the stts22h. If it returns
-    //       an error, use printf to print an error message and call
-    //       the Error_Handler() function.
-    if (stts22h_read_temp(&temp_centidegree) != STTS22H_OK) {
-      printf("ERROR: Failed to read temperature from sensor!\r\n");
-      Error_Handler();
-    }
-
-    // TODO: Convert temp_centidegree value to actual degrees:
-    float temp_degress = (float) temp_centidegree / 100.0f;
-
-    printf("[%u/20] Current temperature: %.2f\r\n", i + 1, temp_degress);
-  }
-
-  printf("Press enter button to test one-shot mode...\r\n");
-  wait_for_button_press();
-
-  // ==== 4: Configure in one-shot mode ====
-  // TODO: Call your completed stts22h_configure() function to put the
-  //       temperature sensor into one-shot mode.
-  //       If it returns an error, print an error message using printf and
-  //       call the Error_Handler() function. Otherwise print a confirmation
-  //       message that the sensor was configured correctly.
-  if (stts22h_configure(STTS22H_MODE_ONE_SHOT) != STTS22H_OK) {
-    printf("ERROR: Failed to configure sensor in one-shot mode!\r\n");
-    Error_Handler();
-  } else {
-    printf("Sensor configured in one-shot mode!\r\n");
-  }
-
-  // ==== 5: On button press: trigger measurement, wait for completion, print result ====
-  while (1) {
-
-    // Trigger measurement:
-    // TODO: Call your completed stts22h_trigger_oneshot() function to
-    //       trigger a single measurement.
-    //       If it returns an error, print an error message using printf and
-    //       call the Error_Handler() function. Otherwise print a confirmation
-    //       message that a measurement was triggered.
-    if (stts22h_trigger_oneshot() != STTS22H_OK) {
-      printf("ERROR: Failed to trigger one-shot measurement!\r\n");
-      Error_Handler();
-    } else {
-      printf("One-shot measurement triggered!\r\n");
-    }
-
-    // Wait for measurement to be completed:
-    uint32_t cnt = 0;
-    while (1) {
-      HAL_Delay(10);
-
-      bool is_busy = false;
-      // TODO: Call your stts22h_check_is_busy function to determine if the
-      //       measurement you triggered is completed. If it returns an error,
-      //       use printf to print an error message.
-      if (stts22h_check_is_busy(&is_busy) != STTS22H_OK) {
-        printf("ERROR: Failed to check if one-shot measurement is busy!\r\n");
-        Error_Handler();
-      }
-
-      if (!is_busy) {
-        break; // Measurement done.
-      }
-
-      // Timeout:
-      cnt++;
-      if (cnt > 20) {
-        printf("ERROR: One-shot measurement took too long to complete!\r\n");
-        Error_Handler();
-      }
-    }
-
-    // Retrieve & print measurement:
-    int16_t temp_centidegree = 0;
-    // TODO Retrieve the current temperature, convert it to degrees, and
-    //      print it to the console (just like you did before).
-    if (stts22h_read_temp(&temp_centidegree) != STTS22H_OK) {
-      printf("ERROR: Failed to read temperature from sensor!\r\n");
-      Error_Handler();
-    }
-    float temp_degress = (float) temp_centidegree / 100.0f;
-    printf("One-shot measurement completed! Current temperature: %.2f\r\n", temp_degress);
-    // Wait for button to be pressed before doing another one-shot measurement:
-    printf("Press enter to test one-shot measurement...\r\n");
-    wait_for_button_press();
-  }
-}
-
-void wait_for_button_press(void) {
-  // If the button is already pressed, wait for button to be released:
-  while (HAL_GPIO_ReadPin(BTN_ENTER_GPIO_Port, BTN_ENTER_Pin) == GPIO_PIN_RESET) {
-  }
-  // Wait for the button to be released:
-  while (HAL_GPIO_ReadPin(BTN_ENTER_GPIO_Port, BTN_ENTER_Pin) == GPIO_PIN_SET) {
-  }
-}
-
 /* USER CODE END 4 */
 
 /**
@@ -439,7 +298,7 @@ void Error_Handler(void)
     HAL_GPIO_TogglePin(LED2_GPIO_Port, LED2_Pin);
     HAL_Delay(1000);
 
-    printf("Stuck in error handler :(...\r\n");
+    printf("# ERROR firmware halted; reset required\r\n");
   }
   /* USER CODE END Error_Handler_Debug */
 }

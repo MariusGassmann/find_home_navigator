@@ -1,4 +1,8 @@
 build
+.venv/
+__pycache__/
+*.pyc
+captures/
 vcpkg-configuration.json
 .vs
 .vscode
