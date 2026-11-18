@@ -1,5 +1,6 @@
 /* Execute the real driver on an emulated Cortex-M4 with a fake register bus. */
 #include "imu.h"
+int matrix_heading_test(void);
 #define CHECK(condition) do { if (!(condition)) return __LINE__; } while (0)
 static uint8_t registers[256];
 static int read_failure, write_failure, stuck_reset, corrupt, delayed;
@@ -64,5 +65,5 @@ int test_main(void) {
       CHECK(sample.gyro[axis] == expected);
     }
   }
-  return 0;
+  return matrix_heading_test();
 }

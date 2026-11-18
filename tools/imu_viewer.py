@@ -10,12 +10,14 @@ from imu_model import BOARD_AXES, Attitude, Demo, euler, norm, parse, rotate
 from imu_calibration import load as load_accel_calibration
 
 
-def serial_reader(port, lines, stop):
+def serial_reader(port, lines, commands, stop):
     import serial
     try:
         with serial.Serial(port, 115200, timeout=.1) as device:
             buffer = b''
             while not stop.is_set():
+                while not commands.empty():
+                    device.write(commands.get_nowait())
                 raw = device.read_until(b'\n', 256)
                 # Preserve partial serial lines across read timeouts.
                 buffer += raw
@@ -39,6 +41,7 @@ class Session:
         calibration = load_accel_calibration(args.accel_cal) if args.accel_cal else None
         self.model = Attitude(args.axes, 0 if args.gyro_only else 1.5, not args.no_bias, calibration)
         self.queue = queue.Queue(maxsize=2048)
+        self.commands = queue.Queue()
         self.stop = threading.Event()
         self.reader = None
         self.started = time.monotonic()
@@ -56,7 +59,7 @@ class Session:
                 self.log.write('# ACCEL_CAL ' + json.dumps(calibration) + '\n')
         if args.port:
             self.reader = threading.Thread(target=serial_reader,
-                                           args=(args.port, self.queue, self.stop), daemon=True)
+                                           args=(args.port, self.queue, self.commands, self.stop), daemon=True)
             self.reader.start()
         if args.replay:
             self.replay = Path(args.replay).open(encoding='utf-8')
@@ -65,6 +68,12 @@ class Session:
 
     def reference(self):
         self.consume('# REFERENCE')
+        if self.args.port:
+            self.commands.put(b'r')
+
+    def matrix_test(self):
+        if self.args.port:
+            self.commands.put(b't')
 
     def consume(self, line):
         if self.log:
@@ -150,8 +159,10 @@ def gui(session):
     readings = tk.StringVar()
     ttk.Label(root, textvariable=readings, font=('Consolas', 11), padding=10).pack(fill='x')
     ttk.Label(root, text='Board +X points toward POTI. Yaw is relative to start. '
-              'Keep still to measure drift; yaw during motion is not a drift measurement.', padding=8).pack(fill='x')
+              'Keep still to measure drift. T: hardware LED pixel test; Enter: reference.', padding=8).pack(fill='x')
     root.bind('<Return>', lambda _: session.reference())
+    root.bind('<KeyPress-t>', lambda _: session.matrix_test())
+    root.bind('<KeyPress-T>', lambda _: session.matrix_test())
     root.bind('<Escape>', lambda _: root.destroy())
 
     def draw():

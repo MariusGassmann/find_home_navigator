@@ -1,8 +1,9 @@
 # Find Home navigator
 
 STM32 NUCLEO-L476RG with ETH PBL Shield rev 1.2 and LSM6DSV16BX IMU.
-Current firmware streams IMU measurements; the laptop estimates and displays
-orientation. GNSS, magnetic heading, navigation, LED guidance and sleep are next.
+Firmware streams IMU measurements and drives a fixed-direction LED pointer using
+a 3D gyro/gravity heading estimate. The laptop provides full 3D diagnostics.
+GNSS, magnetic heading, home navigation and sleep are next.
 
 ## Build and flash
 
@@ -29,6 +30,11 @@ Close other serial monitors before opening COM3. Rediscover the port with
 `python -m serial.tools.list_ports -v` if needed. Place the board level and still,
 press Enter in the viewer or on the shield, and hold still for two seconds.
 +X points toward the POTI. Initial yaw is zero, not geographic north.
+The board blinks its center LEDs while calibrating, then shows a green head toward
+the starting direction and a red tail opposite. Normal pickup and tilt are allowed.
+The pointer goes dark when the POTI points almost vertically, then resumes when
+lowered. All red means clipping, lost samples or a hardware error; reference again.
+Press `T` in the live viewer for a 4.8-second LED pixel/color test.
 
 | Option | Effect |
 | --- | --- |
@@ -49,6 +55,8 @@ See [IMU details](docs/imu_test.md) and [calibration](docs/imu_calibration_resul
 
 - `Core/Src/imu.c`: portable sensor driver.
 - `Core/Src/imu_test.c`: SPI2 transport, button and serial diagnostic.
+- `Core/Src/heading.c`: level bias calibration, 3D attitude and pointer sector.
+- `Core/Src/matrix.c`: eight pointer patterns and shield shift-register encoding.
 - `tools/imu_model.py`: coordinate transform and attitude estimation.
 - `tools/imu_viewer.py`: serial, simulation/replay, logging and 3D view.
 - `tools/imu_calibration.py`: six-pose calibration extraction and fitting.

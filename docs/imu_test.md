@@ -10,7 +10,7 @@ WHO_AM_I `0x71`, matching the [ST datasheet](https://www.st.com/resource/en/data
 | --- | --- |
 | SPI2 SCK / MISO / MOSI | PB13 / PB14 / PC3, AF5, mode 3, 1.25 MHz |
 | IMU chip select | PB12, active low |
-| Shared LED-matrix latch | PB11, held low |
+| Shared LED-matrix latch | PB11, pulsed after a complete 24-bit frame |
 | Shield Enter | PH0, active low, external pull-up, 30 ms debounce |
 | USB ST-LINK virtual COM | USART2, PA2 TX / PA3 RX, 115200 8N1 |
 | I2C1, reserved for external sensors | PB8 SCL / PB9 SDA, original timing retained |
@@ -40,7 +40,8 @@ IMU,tick_ms,sequence,reference,ax,ay,az,gx,gy,gz
 
 Measurements are signed raw counts in sensor XYZ. Timestamp is the MCU tick at
 read completion, with 1 ms resolution. Sequence and reference are uint32 counters.
-A debounced shield press or received ASCII `r` increments reference. Samples are
+A debounced shield press or received ASCII `r` increments reference and starts
+onboard heading calibration. Keyboard Enter also sends `r` in live mode. Samples are
 read only when acceleration and gyro are both ready. Transport failure or no
 fresh data for 500 ms enters the firmware error handler.
 
@@ -73,8 +74,46 @@ Raw sensor clipping checks remain active regardless of calibration.
 Driver identity/readback and approximately 60.5 Hz streaming were verified on
 hardware. Operator tests confirmed axis signs, low short-term stationary yaw
 change with bias subtraction, and tilt recovery with gravity correction.
-Six-pose calibration and 25 Python tests cover the current diagnostic baseline;
+Six-pose calibration and 28 Python tests cover the current diagnostic baseline;
 ARM emulation checks all 65,536 signed patterns on every channel.
+
+## LED fixed-direction test
+
+The 4x3 logical display has row 0 toward POTI and columns left-to-right looking
+forward. A green head and opposite red tail select one of eight directions.
+Positive sectors run forward, forward-left, left, back-left, back, back-right,
+right, forward-right. Pointer angle is negative onboard yaw, with 3-degree
+hysteresis at the 45-degree sector boundaries. Direction is therefore coarse.
+
+Enter requires two seconds and >=100 consecutive level/still samples, using the
+reference checks above. All three gyro biases are subtracted before quaternion
+integration in the board frame. Gravity correction uses gain 1.5/s when raw
+acceleration is 0.9-1.1 g; outside that range, gyro tracking continues alone.
+There is no tracking tilt limit. Pointer yaw comes from the horizontal projection
+of board +X; within 10 degrees of vertical, the pointer goes dark while orientation
+continues tracking, then resumes automatically. This is relative heading without
+a magnetic reference. Linear acceleration inside the gravity gate can still
+disturb tilt. Onboard gravity uses raw acceleration; the optional six-pose
+calibration and viewer flags currently affect laptop estimation only.
+
+| Matrix state | Meaning |
+| --- | --- |
+| Off | Waiting for Enter, or forward is almost vertical during tracking |
+| Blinking red+green center pair | Collecting level/still reference |
+| Green head / red tail | Tracking the starting direction |
+| All red | Clipping, >100 ms sample gap, or hardware failure; reference/reset needed |
+
+`T` in the live viewer sends ASCII `t`: walk all 12 pixels green, then red,
+200 ms each, row-by-row starting toward POTI. Raw sensor streaming continues.
+The test ends off; press Enter to reference afterward. Enter cancels a running
+pixel test. `# HEADING` serial diagnostics report state, yaw in millidegrees,
+sensor gyro Z bias in millidegrees/s, sector and horizontal-direction validity
+once per second while tracking.
+
+All matrix transfers deselect the IMU, write U3/U2/U1 bytes MSB first, then pulse
+the latch. IMU transactions can shift the internal registers but never latch them,
+so the visible frame persists. ARM tests cover all 24 color outputs, frame byte
+order, pointer direction, hysteresis, bias, wrap, rejection and re-reference.
 
 This is sufficient to develop navigation logic. Temperature dependence, precise
 motion accuracy, magnetic heading and power consumption remain uncharacterized.

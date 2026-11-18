@@ -19,6 +19,8 @@ target_compile_definitions(stm32cubemx INTERFACE HAL_SPI_MODULE_ENABLED)
 target_sources(${PROJECT_NAME} PRIVATE
     Core/Src/imu.c
     Core/Src/imu_test.c
+    Core/Src/matrix.c
+    Core/Src/heading.c
     Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_spi.c
     Drivers/STM32L4xx_HAL_Driver/Src/stm32l4xx_hal_spi_ex.c
 )
