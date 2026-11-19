@@ -5,7 +5,7 @@ Default firmware streams IMU, GNSS reception and raw QMC5883P compass measuremen
 [wiring and capture steps](docs/gnss_test.md). The selectable IMU mode streams
 measurements and drives a fixed-direction LED pointer with 3D gyro/gravity heading.
 Compass calibration and validation: [instructions](docs/compass_calibration.md).
-Held-level magnetic heading is available in the laptop viewer; see
+Tilt-compensated magnetic heading is available in the laptop viewer; see
 [heading checks](docs/compass_heading.md). Home navigation and sleep remain to be implemented.
 
 ## Build and flash
@@ -47,7 +47,8 @@ Press `T` in the live viewer for a 4.8-second LED pixel/color test.
 | Option | Effect |
 | --- | --- |
 | `--compass` | Add raw XYZ compass plots; default USB 460800, uncalibrated sensor frame |
-| `--mag-axes=y,x,-z` | Enable held-level heading with the inferred compass-to-board transform |
+| `--level-only` | Use the original 5-degree held-level compass baseline |
+| `--mag-axes=y,x,-z` | Enable magnetic heading with the inferred compass-to-board transform |
 | `--mag-cal calibration/mag.json` | Apply validated compass calibration to plots; requires `--compass` |
 | `--baud 115200` | Override serial speed when needed |
 | Default | Gyro integration, initial bias subtraction, gravity correction |

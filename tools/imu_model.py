@@ -94,6 +94,10 @@ class Attitude:
         self.message = 'Place board level; press Enter to reference'
         self.gaps = 0
 
+    def up_vector(self):
+        """Estimated world-up expressed in board axes; unavailable until referenced."""
+        return rotate((self.q[0], *(-v for v in self.q[1:])), (0, 0, 1)) if self.ready else None
+
     def reference(self):
         self.ready = False
         self.calibrating = True

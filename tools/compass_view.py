@@ -1,15 +1,16 @@
-"""QMC5883P field plots and optional held-level magnetic heading."""
+"""QMC5883P field plots and optional magnetic heading."""
 from collections import deque
 import math
 import time
 from imu_model import mounting
-from magnetic_heading import level_heading
+from magnetic_heading import level_heading, tilt_heading
 
 
 class Compass:
-    def __init__(self, calibration=None, axes=None):
+    def __init__(self, calibration=None, axes=None, tilt_comp=False):
         self.calibration = calibration
         self.axes = axes
+        self.tilt_comp = tilt_comp
         self.transform = mounting(axes) if axes else None
         self.tick = None
         self.usable = False
@@ -67,7 +68,7 @@ class Compass:
                 x, y = coords[-1]
                 canvas.create_oval(x-3, y-3, x+3, y+3, fill='#ffcc66', outline='')
 
-    def heading(self, accel, imu_tick, imu_age):
+    def heading(self, accel, imu_tick, imu_age, up=None):
         if self.calibration is None or self.transform is None:
             return None, 'Calibration and compass mounting axes required'
         if not self.usable:
@@ -77,10 +78,13 @@ class Compass:
         if imu_tick is None or min((imu_tick-self.tick) & 0xffffffff,
                                    (self.tick-imu_tick) & 0xffffffff) > 100:
             return None, 'IMU and compass samples not synchronized'
-        return level_heading(self.transform(self.points[-1]), accel, self.calibration['field_uT'])
+        field = self.transform(self.points[-1])
+        if self.tilt_comp:
+            return tilt_heading(field, accel, self.calibration['field_uT'], up)
+        return level_heading(field, accel, self.calibration['field_uT'])
 
-    def draw_heading(self, canvas, accel, imu_tick, imu_age):
-        heading, reason = self.heading(accel, imu_tick, imu_age)
+    def draw_heading(self, canvas, accel, imu_tick, imu_age, up=None):
+        heading, reason = self.heading(accel, imu_tick, imu_age, up)
         canvas.delete('all')
         width, height = canvas.winfo_width(), canvas.winfo_height()
         cx, cy = width/2, height/2+2

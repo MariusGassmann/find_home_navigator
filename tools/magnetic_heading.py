@@ -1,13 +1,12 @@
-"""Held-level baseline: board +X forward, +Y left, +Z up; field in uT.
+"""Magnetic heading: board +X forward, +Y left, +Z up; field in uT.
 
-Heading is clockwise from magnetic north in [0, 360). This does not correct
-magnetic declination, compensate tilt, or feed magnetic data into IMU yaw.
+Clockwise from magnetic north in [0,360); no declination or magnetic fusion.
+Tilt mode projects onto the horizontal plane defined by the IMU up vector.
 """
-from math import acos, atan2, degrees, hypot, isfinite
+from math import acos, atan2, degrees, hypot, isfinite, radians, sin
 
 
-def level_heading(field, accel, reference_field):
-    """Return (heading or None, diagnostic). Inputs must already use board axes."""
+def _heading(field, accel, reference_field, up=None):
     if not all(isfinite(v) for v in (*field, *accel, reference_field)) or reference_field <= 0:
         return None, 'Invalid sensor values'
     strength, gravity = hypot(*field), hypot(*accel)
@@ -15,9 +14,39 @@ def level_heading(field, accel, reference_field):
         return None, 'Field strength outside calibration range'
     if not .9 <= gravity <= 1.1:
         return None, 'Acceleration unreliable; hold still'
-    tilt = degrees(acos(max(-1, min(1, accel[2]/gravity))))
-    if tilt > 5:
-        return None, f'Hold level: tilt {tilt:.1f} deg (limit 5 deg)'
-    if hypot(field[0], field[1]) < 5:
+    if up is None:
+        tilt = degrees(acos(max(-1, min(1, accel[2]/gravity))))
+        if tilt > 5:
+            return None, f'Hold level: tilt {tilt:.1f} deg (limit 5 deg)'
+        x, y = field[0], field[1]
+        mode = 'Level baseline'
+    else:
+        length = hypot(*up)
+        if not all(isfinite(v) for v in up) or not isfinite(length) or length < 1e-6:
+            return None, 'Invalid gravity estimate'
+        u = tuple(v/length for v in up)
+        if u[2] <= 0:
+            return None, 'Keep component side facing up'
+        # Forward is board +X projected onto the horizontal plane; left = up x forward.
+        forward = (1-u[0]*u[0], -u[0]*u[1], -u[0]*u[2])
+        projection = hypot(*forward)
+        if projection < sin(radians(10)):
+            return None, 'Forward direction nearly vertical'
+        f = tuple(v/projection for v in forward)
+        left = (u[1]*f[2]-u[2]*f[1], u[2]*f[0]-u[0]*f[2], u[0]*f[1]-u[1]*f[0])
+        x, y = sum(field[i]*f[i] for i in range(3)), sum(field[i]*left[i] for i in range(3))
+        tilt = degrees(acos(max(-1, min(1, u[2]))))
+        mode = 'Tilt compensated'
+    if hypot(x, y) < 5:
         return None, 'Horizontal field too weak'
-    return degrees(atan2(field[1], field[0])) % 360, f'Level baseline; tilt {tilt:.1f} deg'
+    return degrees(atan2(y, x)) % 360, f'{mode}; tilt {tilt:.1f} deg'
+
+
+def level_heading(field, accel, reference_field):
+    return _heading(field, accel, reference_field)
+
+
+def tilt_heading(field, accel, reference_field, up):
+    if up is None:
+        return None, 'Press Enter; hold level and still for IMU reference'
+    return _heading(field, accel, reference_field, up)

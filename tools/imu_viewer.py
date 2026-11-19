@@ -52,7 +52,8 @@ class Session:
         if getattr(args, 'mag_cal', None):
             from mag_calibration import load
             magnetic_cal = load(args.mag_cal)
-        self.compass = Compass(magnetic_cal, getattr(args, 'mag_axes', None))
+        self.compass = Compass(magnetic_cal, getattr(args, 'mag_axes', None),
+                               tilt_comp=not getattr(args, 'level_only', False))
         self.demo = Demo() if args.demo else None
         self.replay = None
         self.log = None
@@ -134,7 +135,7 @@ class Session:
     def summary(self):
         m = self.model
         age = time.monotonic()-self.last_data if self.last_data is not None else float('inf')
-        magnetic_heading, magnetic_status = self.compass.heading(m.accel, m.last.tick if m.last else None, age)
+        magnetic_heading, magnetic_status = self.compass.heading(m.accel, m.last.tick if m.last else None, age, m.up_vector())
         return dict(samples=self.samples, malformed=self.bad, gaps=m.gaps, ready=m.ready,
                     elapsed_s=round(m.elapsed, 3), roll_pitch_yaw_deg=euler(m.q),
                     accumulated_yaw_deg=m.yaw_total, measured_bias_dps=m.bias,
@@ -142,6 +143,7 @@ class Session:
                     accel_offset_g=m.accel_offset, accel_scale=m.accel_scale,
                     mag_axes=self.compass.axes, magnetic_heading_deg=magnetic_heading,
                     magnetic_heading_status=magnetic_status,
+                    tilt_compensated=self.compass.tilt_comp,
                     compass_samples=self.compass.samples, compass_overflows=self.compass.overflows,
                     status=m.message)
 
@@ -205,11 +207,11 @@ def gui(session):
         if session.args.compass:
             session.compass.draw(magnetic)
             magnetic_text.set(session.compass.text() +
-                              (f' | board axes: {session.compass.axes} (inferred; verify physically)'
+                              (f' | board axes: {session.compass.axes}'
                                if session.compass.axes else ''))
             if session.compass.axes:
                 age = time.monotonic()-session.last_data if session.last_data is not None else float('inf')
-                session.compass.draw_heading(dial, m.accel, m.last.tick if m.last else None, age)
+                session.compass.draw_heading(dial, m.accel, m.last.tick if m.last else None, age, m.up_vector())
         canvas.delete('all')
         width, height = canvas.winfo_width(), canvas.winfo_height()
         scale = min(width, height)*.47
@@ -266,7 +268,8 @@ def main():
     source.add_argument('--replay', help='Replay a raw capture; use its original --axes/mode flags')
     parser.add_argument('--axes', default=BOARD_AXES, help='Signed sensor axes for board X,Y,Z; default: %(default)s. Use --axes=... for a leading minus.')
     parser.add_argument('--compass', action='store_true', help='Show raw compass alongside IMU; USB defaults to 460800')
-    parser.add_argument('--mag-axes', help='Enable level heading with signed sensor axes for board XYZ; inferred mounting: y,x,-z')
+    parser.add_argument('--level-only', action='store_true', help='Use original held-level compass baseline instead of tilt compensation')
+    parser.add_argument('--mag-axes', help='Enable magnetic heading with signed sensor axes for board XYZ; inferred mounting: y,x,-z')
     parser.add_argument('--mag-cal', help='Apply validated sensor-frame compass calibration JSON')
     parser.add_argument('--baud', type=int, help='Override USB serial baud rate')
     parser.add_argument('--gyro-only', action='store_true')
@@ -279,6 +282,8 @@ def main():
     args = parser.parse_args()
     if args.log and Path(args.log).exists() and not args.overwrite:
         parser.error('Log already exists; choose a new filename or use --overwrite')
+    if args.level_only and not args.mag_axes:
+        parser.error('--level-only requires --mag-axes')
     if args.mag_axes and not (args.compass and args.mag_cal):
         parser.error('--mag-axes requires --compass and --mag-cal')
     if args.mag_cal and not args.compass:
