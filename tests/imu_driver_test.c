@@ -65,5 +65,7 @@ int test_main(void) {
       CHECK(sample.gyro[axis] == expected);
     }
   }
-  return matrix_heading_test();
+  int result = matrix_heading_test();
+  extern int gnss_test(void);
+  return result ? result : gnss_test();
 }

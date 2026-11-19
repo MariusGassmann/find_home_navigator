@@ -24,6 +24,7 @@ subprocess.run([gcc, '-mcpu=cortex-m4', '-mthumb', '-mfloat-abi=soft', '-O1',
                 '-Wall', '-Wextra', '-Werror',
                 '-I', str(root/'Core/Inc'), str(root/'Core/Src/imu.c'),
                 str(root/'Core/Src/matrix.c'), str(root/'Core/Src/heading.c'),
+                str(root/'Core/Src/gnss.c'), str(root/'tests/gnss_test.c'),
                 str(root/'tests/imu_driver_test.c'), str(root/'tests/matrix_heading_test.c'),
                 '-T', str(script), '-o', str(elf), '-lm', '-lc', '-lnosys', '-lgcc'], check=True)
 subprocess.run([objcopy, '-O', 'binary', str(elf), str(binary)], check=True)
@@ -40,6 +41,8 @@ if cpu.reg_read(UC_ARM_REG_PC) != 0x1f000:
     sys.exit('ARM driver test timed out')
 result = cpu.reg_read(UC_ARM_REG_R0)
 if result:
+    if result >= 2000:
+        sys.exit(f'ARM GNSS CHECK failed at tests/gnss_test.c:{result-2000}')
     if result >= 1000:
         sys.exit(f'ARM matrix/heading CHECK failed at tests/matrix_heading_test.c:{result-1000}')
     sys.exit(f'ARM driver CHECK failed at tests/imu_driver_test.c:{result}')
@@ -48,3 +51,5 @@ print('PASS: ARM driver identity/reset/readback/error/ready/axis-order tests; '
 print('PASS: matrix wiring/colors/directions; heading bias, counter-rotation, hysteresis, '
       'wrap, tilted turns, pickup acceleration, vertical recovery, gravity correction, '
       'reference noise/tilt rejection, clipping/gap rejection and re-reference')
+print('PASS: GGA checksums, coordinates, hemispheres, limits, fix loss, freshness/wrap, '
+      'malformed fields, long/partial/binary frames and 1,000 noisy-stream recoveries')

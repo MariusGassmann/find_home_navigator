@@ -11,6 +11,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "imu_test.h"
+#include "sensor_test.h"
 #include <stdio.h>
 /* USER CODE END Includes */
 
@@ -85,7 +86,11 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
+#ifdef FIND_HOME_SENSOR_TEST
+  sensor_test_run();
+#else
   imu_test_run();
+#endif
 
   /* USER CODE END 2 */
 

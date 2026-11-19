@@ -1,9 +1,10 @@
 # Find Home navigator
 
 STM32 NUCLEO-L476RG with ETH PBL Shield rev 1.2 and LSM6DSV16BX IMU.
-Firmware streams IMU measurements and drives a fixed-direction LED pointer using
-a 3D gyro/gravity heading estimate. The laptop provides full 3D diagnostics.
-GNSS, magnetic heading, home navigation and sleep are next.
+Default firmware tests GNSS reception and compass identity; see
+[wiring and capture steps](docs/gnss_test.md). The selectable IMU mode streams
+measurements and drives a fixed-direction LED pointer with 3D gyro/gravity heading.
+Magnetic heading, home navigation and sleep remain to be implemented.
 
 ## Build and flash
 
@@ -18,6 +19,9 @@ STM32_Programmer_CLI -c port=SWD -d build/Debug/LAB04_I2C.elf -v -rst
 ```
 
 ## Laptop viewer
+
+For the IMU/matrix mode, configure `-DFIND_HOME_SENSOR_TEST=OFF` and rebuild.
+The GNSS mode uses `tools/sensor_capture.py` instead of this viewer.
 
 ```powershell
 conda create -n find-home python=3.12 pip -y
@@ -57,6 +61,8 @@ See [IMU details](docs/imu_test.md) and [calibration](docs/imu_calibration_resul
 - `Core/Src/imu_test.c`: SPI2 transport, button and serial diagnostic.
 - `Core/Src/heading.c`: level bias calibration, 3D attitude and pointer sector.
 - `Core/Src/matrix.c`: eight pointer patterns and shield shift-register encoding.
+- `Core/Src/gnss.c`: bounded NMEA/GGA parser and position freshness checks.
+- `Core/Src/sensor_test.c`: interrupt-driven GNSS UART and read-only compass discovery.
 - `tools/imu_model.py`: coordinate transform and attitude estimation.
 - `tools/imu_viewer.py`: serial, simulation/replay, logging and 3D view.
 - `tools/imu_calibration.py`: six-pose calibration extraction and fitting.
