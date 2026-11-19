@@ -8,12 +8,13 @@ import time
 
 from imu_model import BOARD_AXES, Attitude, Demo, euler, norm, parse, rotate
 from imu_calibration import load as load_accel_calibration
+from compass_view import Compass
 
 
-def serial_reader(port, lines, commands, stop):
+def serial_reader(port, lines, commands, stop, baud=115200):
     import serial
     try:
-        with serial.Serial(port, 115200, timeout=.1) as device:
+        with serial.Serial(port, baud, timeout=.1) as device:
             buffer = b''
             while not stop.is_set():
                 while not commands.empty():
@@ -47,19 +48,27 @@ class Session:
         self.started = time.monotonic()
         self.last_data = None
         self.samples = self.bad = 0
+        magnetic_cal = None
+        if getattr(args, 'mag_cal', None):
+            from mag_calibration import load
+            magnetic_cal = load(args.mag_cal)
+        self.compass = Compass(magnetic_cal, getattr(args, 'mag_axes', None))
         self.demo = Demo() if args.demo else None
         self.replay = None
         self.log = None
         if args.log:
             path = Path(args.log)
             path.parent.mkdir(parents=True, exist_ok=True)
-            self.log = path.open('w', encoding='utf-8', buffering=1)
+            self.log = path.open('w' if getattr(args, 'overwrite', False) else 'x', encoding='utf-8', buffering=1)
             self.log.write('# SETTINGS ' + json.dumps(vars(args)) + '\n')
             if calibration:
                 self.log.write('# ACCEL_CAL ' + json.dumps(calibration) + '\n')
+            if magnetic_cal:
+                self.log.write('# MAG_CAL ' + json.dumps(magnetic_cal) + '\n')
         if args.port:
             self.reader = threading.Thread(target=serial_reader,
-                                           args=(args.port, self.queue, self.commands, self.stop), daemon=True)
+                                           args=(args.port, self.queue, self.commands, self.stop,
+                                                 args.baud or (460800 if args.compass else 115200)), daemon=True)
             self.reader.start()
         if args.replay:
             self.replay = Path(args.replay).open(encoding='utf-8')
@@ -86,6 +95,12 @@ class Session:
             if 'ERROR' in line:
                 self.model.ready = self.model.calibrating = False
                 self.model.message = line
+            return
+        if line.startswith('MAG,'):
+            if not self.compass.update(line):
+                self.bad += 1
+            return
+        if line.startswith(('RX,', 'GNSS,')) or not line.strip():
             return
         sample = parse(line)
         if sample is None:
@@ -118,11 +133,16 @@ class Session:
 
     def summary(self):
         m = self.model
+        age = time.monotonic()-self.last_data if self.last_data is not None else float('inf')
+        magnetic_heading, magnetic_status = self.compass.heading(m.accel, m.last.tick if m.last else None, age)
         return dict(samples=self.samples, malformed=self.bad, gaps=m.gaps, ready=m.ready,
                     elapsed_s=round(m.elapsed, 3), roll_pitch_yaw_deg=euler(m.q),
                     accumulated_yaw_deg=m.yaw_total, measured_bias_dps=m.bias,
                     subtract_bias=m.subtract_bias, gravity_gain=m.gain, axes=self.args.axes,
                     accel_offset_g=m.accel_offset, accel_scale=m.accel_scale,
+                    mag_axes=self.compass.axes, magnetic_heading_deg=magnetic_heading,
+                    magnetic_heading_status=magnetic_status,
+                    compass_samples=self.compass.samples, compass_overflows=self.compass.overflows,
                     status=m.message)
 
     def close(self):
@@ -144,7 +164,7 @@ def gui(session):
     from tkinter import ttk
     root = tk.Tk()
     root.title('Find Home — IMU bench | Enter = level reference')
-    root.geometry('1000x760')
+    root.geometry('1100x900' if session.compass.axes else '1000x760')
     controls = ttk.Frame(root, padding=10)
     controls.pack(fill='x')
     ttk.Button(controls, text='Start / reference (Enter)', command=session.reference).pack(side='left')
@@ -156,10 +176,22 @@ def gui(session):
     ttk.Label(root, textvariable=state, padding=8).pack(fill='x')
     canvas = tk.Canvas(root, bg='#142032', highlightthickness=0)
     canvas.pack(fill='both', expand=True)
+    magnetic_frame = ttk.Frame(root)
+    magnetic = tk.Canvas(magnetic_frame, bg='#142032', height=240, highlightthickness=0)
+    dial = tk.Canvas(magnetic_frame, bg='#142032', width=280, height=240, highlightthickness=0)
+    magnetic_text = tk.StringVar()
+    if session.args.compass:
+        magnetic_frame.pack(fill='x')
+        if session.compass.axes:
+            dial.pack(side='right', fill='y')
+        magnetic.pack(side='left', fill='both', expand=True)
+        ttk.Label(root, textvariable=magnetic_text, padding=4).pack(fill='x')
     readings = tk.StringVar()
     ttk.Label(root, textvariable=readings, font=('Consolas', 11), padding=10).pack(fill='x')
     ttk.Label(root, text='Board +X points toward POTI. Yaw is relative to start. '
-              'Keep still to measure drift. T: hardware LED pixel test; Enter: reference.', padding=8).pack(fill='x')
+              'Keep still to measure drift. Compass plots use sensor axes; yaw has no magnetic correction.'
+              if session.args.compass else
+              'Board +X points toward POTI. Yaw is relative to start. T: LED test; Enter: reference.', padding=8).pack(fill='x')
     root.bind('<Return>', lambda _: session.reference())
     root.bind('<KeyPress-t>', lambda _: session.matrix_test())
     root.bind('<KeyPress-T>', lambda _: session.matrix_test())
@@ -170,6 +202,14 @@ def gui(session):
         m = session.model
         stale = session.last_data is None or time.monotonic()-session.last_data > .5
         state.set(('NO FRESH DATA — ' if stale else '') + m.message)
+        if session.args.compass:
+            session.compass.draw(magnetic)
+            magnetic_text.set(session.compass.text() +
+                              (f' | board axes: {session.compass.axes} (inferred; verify physically)'
+                               if session.compass.axes else ''))
+            if session.compass.axes:
+                age = time.monotonic()-session.last_data if session.last_data is not None else float('inf')
+                session.compass.draw_heading(dial, m.accel, m.last.tick if m.last else None, age)
         canvas.delete('all')
         width, height = canvas.winfo_width(), canvas.winfo_height()
         scale = min(width, height)*.47
@@ -225,13 +265,24 @@ def main():
     source.add_argument('--demo', action='store_true')
     source.add_argument('--replay', help='Replay a raw capture; use its original --axes/mode flags')
     parser.add_argument('--axes', default=BOARD_AXES, help='Signed sensor axes for board X,Y,Z; default: %(default)s. Use --axes=... for a leading minus.')
+    parser.add_argument('--compass', action='store_true', help='Show raw compass alongside IMU; USB defaults to 460800')
+    parser.add_argument('--mag-axes', help='Enable level heading with signed sensor axes for board XYZ; inferred mounting: y,x,-z')
+    parser.add_argument('--mag-cal', help='Apply validated sensor-frame compass calibration JSON')
+    parser.add_argument('--baud', type=int, help='Override USB serial baud rate')
     parser.add_argument('--gyro-only', action='store_true')
     parser.add_argument('--no-bias', action='store_true')
     parser.add_argument('--accel-cal', help='Apply sensor-frame accelerometer calibration JSON; default OFF')
+    parser.add_argument('--overwrite', action='store_true', help='Explicitly replace an existing capture')
     parser.add_argument('--log', help='Raw text capture including reference events')
     parser.add_argument('--headless', action='store_true', help='Capture/estimate without a window')
     parser.add_argument('--seconds', type=float, default=0, help='Stop after N seconds; 0 means until closed')
     args = parser.parse_args()
+    if args.log and Path(args.log).exists() and not args.overwrite:
+        parser.error('Log already exists; choose a new filename or use --overwrite')
+    if args.mag_axes and not (args.compass and args.mag_cal):
+        parser.error('--mag-axes requires --compass and --mag-cal')
+    if args.mag_cal and not args.compass:
+        parser.error('--mag-cal requires --compass')
     if args.seconds < 0:
         parser.error('--seconds must be nonnegative')
     if args.replay and args.log and Path(args.replay).resolve() == Path(args.log).resolve():

@@ -1,11 +1,18 @@
 """Execute the production IMU, matrix and heading code on an emulated Cortex-M4."""
 from pathlib import Path
+import argparse
 import shutil
+import struct
 import subprocess
 import sys
 
 from unicorn import Uc, UC_ARCH_ARM, UC_MODE_THUMB, UC_MODE_MCLASS
-from unicorn.arm_const import UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0, UC_ARM_REG_SP
+from unicorn.arm_const import (UC_ARM_REG_LR, UC_ARM_REG_PC, UC_ARM_REG_R0,
+                              UC_ARM_REG_R1, UC_ARM_REG_R2, UC_ARM_REG_R3, UC_ARM_REG_SP)
+
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('captures', nargs='*', type=Path, help='Optionally replay RX hex captures through production gnss.c')
+args = parser.parse_args()
 
 root = Path(__file__).resolve().parents[1]
 output = root / 'build' / 'driver-test'
@@ -25,6 +32,7 @@ subprocess.run([gcc, '-mcpu=cortex-m4', '-mthumb', '-mfloat-abi=soft', '-O1',
                 '-I', str(root/'Core/Inc'), str(root/'Core/Src/imu.c'),
                 str(root/'Core/Src/matrix.c'), str(root/'Core/Src/heading.c'),
                 str(root/'Core/Src/gnss.c'), str(root/'tests/gnss_test.c'),
+                str(root/'Core/Src/mag.c'), str(root/'tests/mag_test.c'),
                 str(root/'tests/imu_driver_test.c'), str(root/'tests/matrix_heading_test.c'),
                 '-T', str(script), '-o', str(elf), '-lm', '-lc', '-lnosys', '-lgcc'], check=True)
 subprocess.run([objcopy, '-O', 'binary', str(elf), str(binary)], check=True)
@@ -41,6 +49,8 @@ if cpu.reg_read(UC_ARM_REG_PC) != 0x1f000:
     sys.exit('ARM driver test timed out')
 result = cpu.reg_read(UC_ARM_REG_R0)
 if result:
+    if result >= 3000:
+        sys.exit(f'ARM magnetometer CHECK failed at tests/mag_test.c:{result-3000}')
     if result >= 2000:
         sys.exit(f'ARM GNSS CHECK failed at tests/gnss_test.c:{result-2000}')
     if result >= 1000:
@@ -53,3 +63,39 @@ print('PASS: matrix wiring/colors/directions; heading bias, counter-rotation, hy
       'reference noise/tilt rejection, clipping/gap rejection and re-reference')
 print('PASS: GGA checksums, coordinates, hemispheres, limits, fix loss, freshness/wrap, '
       'malformed fields, long/partial/binary frames and 1,000 noisy-stream recoveries')
+print('PASS: QMC5883P identity, reset, configuration readback, fresh/overflow/error paths; '
+      'all 65,536 signed patterns on each axis')
+
+if args.captures:
+    replay = next(int(line.split()[0], 16) for line in symbols.splitlines() if line.endswith(' gnss_replay'))
+
+    def feed(data=b'', tick=0, reset=0):
+        if data: cpu.mem_write(0x20000000, data)
+        for register, value in ((UC_ARM_REG_R0, 0x20000000), (UC_ARM_REG_R1, len(data)),
+                                (UC_ARM_REG_R2, tick), (UC_ARM_REG_R3, reset),
+                                (UC_ARM_REG_LR, 0x1f001), (UC_ARM_REG_SP, 0x20010000)):
+            cpu.reg_write(register, value)
+        cpu.emu_start(replay | 1, 0x1f000, count=1000000)
+        if cpu.reg_read(UC_ARM_REG_PC) != 0x1f000: sys.exit('ARM replay timed out')
+        return struct.unpack('<5I', cpu.mem_read(cpu.reg_read(UC_ARM_REG_R0), 20))
+
+    for capture in args.captures:
+        counters = feed(reset=1)
+        offset, chunks, boot = 0, 0, 0
+        for line in capture.read_text(errors='replace').splitlines():
+            if '# SENSOR ' in line or '# GNSS discovery:' in line:
+                if chunks: print(f'REPLAY {capture.name} boot={boot}: NMEA/bad/UBX/UBX_bad/fixes={counters}', flush=True)
+                boot += 1; offset = chunks = 0; counters = feed(reset=1)
+            elif line.startswith('# RX_LOSS'):
+                counters = feed(reset=2)
+            elif line.startswith('RX,'):
+                try:
+                    _, tick, start, hex_data = line.split(',')
+                    data = bytes.fromhex(hex_data)
+                    if len(data) > 128: raise ValueError('oversize RX')
+                    if int(start) != offset: feed(reset=2)
+                    counters = feed(data, int(tick))
+                    offset = int(start)+len(data); chunks += 1
+                except ValueError:
+                    feed(reset=2)
+        print(f'REPLAY {capture.name} boot={boot}: NMEA/bad/UBX/UBX_bad/fixes={counters}', flush=True)

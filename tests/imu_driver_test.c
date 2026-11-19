@@ -67,5 +67,7 @@ int test_main(void) {
   }
   int result = matrix_heading_test();
   extern int gnss_test(void);
-  return result ? result : gnss_test();
+  extern int mag_test(void);
+  if (!result) result = gnss_test();
+  return result ? result : mag_test();
 }

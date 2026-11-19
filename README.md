@@ -1,10 +1,12 @@
 # Find Home navigator
 
 STM32 NUCLEO-L476RG with ETH PBL Shield rev 1.2 and LSM6DSV16BX IMU.
-Default firmware tests GNSS reception and compass identity; see
+Default firmware streams IMU, GNSS reception and raw QMC5883P compass measurements; see
 [wiring and capture steps](docs/gnss_test.md). The selectable IMU mode streams
 measurements and drives a fixed-direction LED pointer with 3D gyro/gravity heading.
-Magnetic heading, home navigation and sleep remain to be implemented.
+Compass calibration and validation: [instructions](docs/compass_calibration.md).
+Held-level magnetic heading is available in the laptop viewer; see
+[heading checks](docs/compass_heading.md). Home navigation and sleep remain to be implemented.
 
 ## Build and flash
 
@@ -21,7 +23,9 @@ STM32_Programmer_CLI -c port=SWD -d build/Debug/LAB04_I2C.elf -v -rst
 ## Laptop viewer
 
 For the IMU/matrix mode, configure `-DFIND_HOME_SENSOR_TEST=OFF` and rebuild.
-The GNSS mode uses `tools/sensor_capture.py` instead of this viewer.
+For the default combined sensor mode, add `--compass` to the viewer command
+(USB 460800 baud); no extra Python packages are needed. Close `sensor_capture.py`
+first: a single process must own COM3. Both streams are saved in the same log.
 
 ```powershell
 conda create -n find-home python=3.12 pip -y
@@ -34,7 +38,7 @@ Close other serial monitors before opening COM3. Rediscover the port with
 `python -m serial.tools.list_ports -v` if needed. Place the board level and still,
 press Enter in the viewer or on the shield, and hold still for two seconds.
 +X points toward the POTI. Initial yaw is zero, not geographic north.
-The board blinks its center LEDs while calibrating, then shows a green head toward
+In IMU/matrix mode, the board blinks its center LEDs while calibrating, then shows a green head toward
 the starting direction and a red tail opposite. Normal pickup and tilt are allowed.
 The pointer goes dark when the POTI points almost vertically, then resumes when
 lowered. All red means clipping, lost samples or a hardware error; reference again.
@@ -42,6 +46,10 @@ Press `T` in the live viewer for a 4.8-second LED pixel/color test.
 
 | Option | Effect |
 | --- | --- |
+| `--compass` | Add raw XYZ compass plots; default USB 460800, uncalibrated sensor frame |
+| `--mag-axes=y,x,-z` | Enable held-level heading with the inferred compass-to-board transform |
+| `--mag-cal calibration/mag.json` | Apply validated compass calibration to plots; requires `--compass` |
+| `--baud 115200` | Override serial speed when needed |
 | Default | Gyro integration, initial bias subtraction, gravity correction |
 | `--gyro-only` | Disable gravity correction; keep bias subtraction |
 | `--no-bias` | Disable gyro bias subtraction; combine with other flags |
@@ -49,7 +57,7 @@ Press `T` in the live viewer for a 4.8-second LED pixel/color test.
 | `--axes=y,-x,z` | Sensor-to-board transform; this is the default |
 | `--demo` instead of `--port COM3` | Synthetic three-axis motion; no hardware |
 | `--replay captures/imu.txt` instead of `--port COM3` | Replay raw data; supply the original correction flags |
-| `--log captures/imu.txt` | Save raw packets, settings and reference events; overwrites this filename |
+| `--log captures/imu.txt` | Save raw packets, settings and reference events; existing files require `--overwrite` |
 | `--headless --seconds 60` | Timed capture without a window; shield Enter still works |
 
 Escape closes the viewer. Logging also saves `<name>.summary.json` on close.
@@ -62,7 +70,9 @@ See [IMU details](docs/imu_test.md) and [calibration](docs/imu_calibration_resul
 - `Core/Src/heading.c`: level bias calibration, 3D attitude and pointer sector.
 - `Core/Src/matrix.c`: eight pointer patterns and shield shift-register encoding.
 - `Core/Src/gnss.c`: bounded NMEA/GGA parser and position freshness checks.
-- `Core/Src/sensor_test.c`: interrupt-driven GNSS UART and read-only compass discovery.
+- `Core/Src/mag.c`: QMC5883P initialization, fresh samples and overflow detection.
+- `Core/Src/sensor_test.c`: interrupt-driven GNSS UART and compass bench test.
+- `tools/sensor_analysis.py`: raw-protocol diagnostics and GNSS/compass plots.
 - `tools/imu_model.py`: coordinate transform and attitude estimation.
 - `tools/imu_viewer.py`: serial, simulation/replay, logging and 3D view.
 - `tools/imu_calibration.py`: six-pose calibration extraction and fitting.

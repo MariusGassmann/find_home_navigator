@@ -1,0 +1,126 @@
+{
+  "schema": 1,
+  "sensor": "QMC5883P",
+  "frame": "sensor_xyz",
+  "range_gauss": 8,
+  "counts_per_uT": 37.5,
+  "offset_uT": [
+    15.957159704550506,
+    0.7026944380856577,
+    5.410554850222624
+  ],
+  "matrix": [
+    [
+      1.0033046199362818,
+      0.09187415704268058,
+      -0.02118919549210449
+    ],
+    [
+      0.09187415704268068,
+      0.9816443998164114,
+      0.038982144503945965
+    ],
+    [
+      -0.021189195492104483,
+      0.038982144503945965,
+      1.0262888126484946
+    ]
+  ],
+  "field_uT": 50.53158709821445,
+  "source": {
+    "path": "captures\\mag-validation-v5.txt",
+    "sha256": "e40aa5b5b46152068c0ba9c4e0fe6afede5b288c35ea062387a8fd49567f3dc0",
+    "discarded_pre_reset_segments": 1,
+    "samples": 3800,
+    "sequence_gaps": 0
+  },
+  "validation_source": {
+    "path": "captures\\mag-validation-v6.txt",
+    "sha256": "68e2e8ddf512e4a4420455e146a17c70d0b544523089150919a730d4bd8ef95c",
+    "discarded_pre_reset_segments": 1,
+    "samples": 4649,
+    "sequence_gaps": 0
+  },
+  "quality": {
+    "accepted": true,
+    "training": {
+      "samples": 3800,
+      "coverage": {
+        "passed": true,
+        "direction_eigenvalues": [
+          0.15184287008970684,
+          0.16389921368047317,
+          0.68425791622982
+        ],
+        "direction_min": [
+          -0.9524378558401029,
+          -0.9851310102376418,
+          -0.9998395793674995
+        ],
+        "direction_max": [
+          0.9998314353359388,
+          0.93226066538651,
+          0.9906528813103823
+        ]
+      },
+      "raw_norm_range_uT": [
+        30.677771902289265,
+        71.41252177781335
+      ],
+      "corrected_norm_range_uT": [
+        45.33231956453651,
+        57.09459135234972
+      ],
+      "rms_fraction": 0.03988658489480253,
+      "p95_fraction": 0.08823903580179891,
+      "max_fraction": 0.1298792424900339
+    },
+    "validation": {
+      "samples": 4649,
+      "coverage": {
+        "passed": true,
+        "direction_eigenvalues": [
+          0.14595979534423534,
+          0.16716049484043474,
+          0.6868797098153301
+        ],
+        "direction_min": [
+          -0.9702504607877677,
+          -0.9800007229782494,
+          -0.9827849061050663
+        ],
+        "direction_max": [
+          0.99974108493266,
+          0.9417614427000659,
+          0.9783103844595522
+        ]
+      },
+      "raw_norm_range_uT": [
+        30.454746026778082,
+        70.69772902214675
+      ],
+      "corrected_norm_range_uT": [
+        45.46628906700641,
+        56.05562044699791
+      ],
+      "rms_fraction": 0.03757297711784241,
+      "p95_fraction": 0.06782704050143282,
+      "max_fraction": 0.10931842172395667
+    },
+    "source": {
+      "path": "captures\\mag-validation-v5.txt",
+      "sha256": "e40aa5b5b46152068c0ba9c4e0fe6afede5b288c35ea062387a8fd49567f3dc0",
+      "discarded_pre_reset_segments": 1,
+      "samples": 3800,
+      "sequence_gaps": 0
+    },
+    "validation_source": {
+      "path": "captures\\mag-validation-v6.txt",
+      "sha256": "68e2e8ddf512e4a4420455e146a17c70d0b544523089150919a730d4bd8ef95c",
+      "discarded_pre_reset_segments": 1,
+      "samples": 4649,
+      "sequence_gaps": 0
+    }
+  },
+  "method": "symmetric ellipsoid; determinant-one scale"
+}

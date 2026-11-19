@@ -94,6 +94,31 @@ static void position(gnss_t *g, uint32_t now) {
 }
 
 bool gnss_feed(gnss_t *g, uint8_t byte, uint32_t now) {
+  /* UBX and NMEA share this UART. Validate/skip binary frames so payload '$'
+     bytes cannot be mistaken for NMEA. Position still comes from GGA. */
+  if (g->ubx_phase == 1) {
+    g->ubx_phase = 0;
+    if (byte == 0x62) { g->ubx_phase = 2; g->ck_a = g->ck_b = 0; return false; }
+  }
+  if (g->ubx_phase >= 2) {
+    unsigned phase = g->ubx_phase;
+    if (phase <= 6) { g->ck_a += byte; g->ck_b += g->ck_a; }
+    if (phase == 4) g->ubx_left = byte;
+    if (phase == 5) {
+      g->ubx_left |= (uint16_t)byte << 8;
+      if (g->ubx_left > 4096) { ++g->ubx_bad; g->ubx_phase = 0; return false; }
+      g->ubx_phase = g->ubx_left ? 6 : 7;
+    } else if (phase == 6) {
+      if (!--g->ubx_left) g->ubx_phase = 7;
+    } else if (phase == 7) { g->received_a = byte; g->ubx_phase = 8; }
+    else if (phase == 8) {
+      if (g->received_a == g->ck_a && byte == g->ck_b) ++g->ubx_good;
+      else ++g->ubx_bad;
+      g->ubx_phase = 0;
+    } else ++g->ubx_phase;
+    return false;
+  }
+  if (byte == 0xb5) { g->collecting = false; g->ubx_phase = 1; return false; }
   if (byte == '$') { g->used = 0; g->collecting = true; }
   if (!g->collecting) return false;
   if (byte == '\r') return false;

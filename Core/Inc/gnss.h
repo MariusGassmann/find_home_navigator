@@ -7,6 +7,9 @@ typedef struct {
   char line[160];
   unsigned used;
   uint32_t good, bad, fixes, updated;
+  uint32_t ubx_good, ubx_bad;
+  uint16_t ubx_left;
+  uint8_t ubx_phase, ck_a, ck_b, received_a;
   int32_t lat_e7, lon_e7;
   unsigned quality, satellites, hdop_x100;
   bool collecting, valid;
