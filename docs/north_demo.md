@@ -1,8 +1,9 @@
 # Fused magnetic north demo
 
-This increment runs independently on the STM32. GNSS continues streaming but
-does not affect the arrow. Home capture, Z animation, sleep/wake and distance
-navigation are not implemented yet. Enter currently means heading reference.
+This diagnostic runs independently on the STM32. Select it with
+`cmake --preset Debug -DFIND_HOME_MODE=NORTH`, then build/flash. GNSS continues
+streaming but does not affect the arrow. Enter means heading reference.
+The default NAVIGATOR mode implements [home capture, sleep and navigation](navigation.md).
 
 ## Hardware check
 

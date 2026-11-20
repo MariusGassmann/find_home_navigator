@@ -14,6 +14,7 @@ typedef struct { int16_t accel[3], gyro[3]; } imu_sample_t;
 typedef struct { uint8_t id, ctrl1, ctrl2, ctrl3, ctrl6, ctrl8; } imu_config_t;
 /* LSM6DSV16BX: 60 Hz, +/-2 g (0.061 mg/LSB), +/-500 dps (17.5 mdps/LSB). */
 bool imu_init(const imu_bus_t *bus, imu_config_t *config);
+bool imu_suspend(const imu_bus_t *bus);
 /* Returns -1 on transport error, 0 if not ready, 1 for a fresh sample. */
 int imu_read(const imu_bus_t *bus, imu_sample_t *sample);
 #endif

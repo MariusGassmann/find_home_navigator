@@ -9,6 +9,7 @@ MISSING = -2147483648
 class Fusion:
     def __init__(self):
         self.state = None
+        self.bias_ms = None
         self.tick = None
         self.last_data = None
         self.angles = (None, None, None)
@@ -18,7 +19,11 @@ class Fusion:
 
     def update(self, line):
         try:
-            tag, tick, state, gyro, compass, fused, sector, used = line.strip().split(',')
+            fields = line.strip().split(',')
+            tag, tick, state, gyro, compass, fused, sector, used = fields[:8]
+            bias_ms = int(fields[8]) if len(fields) == 9 else None
+            if len(fields) not in (8,9) or (bias_ms is not None and not 0 <= bias_ms <= 2000):
+                return False
             tick, gyro, compass, fused, sector, used = map(int, (tick, gyro, compass, fused, sector, used))
             if (tag != 'FUSE' or state not in STATES or not 0 <= tick <= 0xffffffff or
                     not 0 <= sector < 8 or used not in (0, 1) or
@@ -30,6 +35,7 @@ class Fusion:
         if (self.tick is not None and (tick-self.tick) & 0xffffffff > 1000) or state in STATES[:3]:
             self.history.clear()
         self.state, self.tick, self.last_data = state, tick, time.monotonic()
+        self.bias_ms = bias_ms
         self.sector, self.mag_used = sector, bool(used)
         self.angles = tuple(None if v == MISSING else v/1000 for v in (gyro, compass, fused))
         if state in ('TRACKING', 'COASTING'):

@@ -55,8 +55,9 @@ than two seconds; it validates/skips UBX without decoding UBX positions.
 `FIX` means usable reception, `NO_FIX` invalid/no fix, `STALE` old position,
 `NO_DATA` no bytes in the interval. Printed old coordinates alone are not valid.
 Latitude/longitude are degrees times 1e7; HDOP is dimensionless times 100.
-`age_ms=4294967295` means no accepted fix. Home-position quality checks are not
-implemented yet. UART errors/overruns/dropped bytes should remain zero.
+`age_ms=4294967295` means no accepted fix. The navigator adds stricter
+[home/position quality checks](navigation.md). UART errors/overruns/dropped bytes
+should remain zero. GGA UTC is parsed to distinguish duplicate measurement epochs.
 
 Analysis produces protocol counters, GNSS spread around the median (not absolute
 accuracy), and magnetic field plots. `--segment` selects a boot, default last.
@@ -77,7 +78,8 @@ centre blinks during reference; all red means invalid tracking. The pointer
 hides when forward is within 10 degrees of vertical. T walks all pixels green,
 then red. SPI transfers deselect the IMU and pulse the latch only after a full
 24-bit frame. Onboard heading uses raw gravity; laptop calibration flags affect
-the laptop estimator only. Neither bench implements sleep.
+the laptop estimator only. Neither diagnostic mode sleeps; the default navigator
+uses the saved calibration onboard and implements STOP2 as described above.
 
 Sources: [ST IMU datasheet](https://www.st.com/resource/en/datasheet/lsm6dsv16bx.pdf),
 [QST compass datasheet](https://www.qstcorp.com/upload/pdf/202512/13-52-19%20QMC5883P%20Datasheet%20Rev.E.pdf),

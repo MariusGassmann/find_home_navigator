@@ -32,6 +32,10 @@ int test_main(void) {
   CHECK(config.id == 0x71 && config.ctrl1 == 5 && config.ctrl2 == 5);
   CHECK(config.ctrl3 == 0x44 && config.ctrl6 == 2 && config.ctrl8 == 0);
   CHECK(delayed == 101);
+  CHECK(imu_suspend(&bus) && registers[0x10] == 0 && registers[0x11] == 0);
+  read_failure = 1; CHECK(!imu_suspend(&bus)); read_failure = 0;
+  write_failure = 1; CHECK(!imu_suspend(&bus)); write_failure = 0;
+  CHECK(imu_init(&bus, &config));
   for (unsigned identity = 0; identity < 256; ++identity) {
     registers[0x0f] = (uint8_t)identity;
     CHECK(imu_init(&bus, &config) == (identity == 0x71));
@@ -69,7 +73,9 @@ int test_main(void) {
   extern int gnss_test(void);
   extern int mag_test(void);
   extern int north_test(void);
+  extern int navigator_test(void);
   if (!result) result = gnss_test();
   if (!result) result = mag_test();
-  return result ? result : north_test();
+  if (!result) result = north_test();
+  return result ? result : navigator_test();
 }

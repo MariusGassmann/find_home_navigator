@@ -1,12 +1,7 @@
 #include "heading.h"
+#include "matrix.h"
 #include <math.h>
 #include <stddef.h>
-
-static float wrap(float angle) {
-  while (angle >= 180) angle -= 360;
-  while (angle < -180) angle += 360;
-  return angle;
-}
 
 static void restart_window(heading_t *h) {
   h->count = 0;
@@ -37,7 +32,8 @@ void heading_update_calibrated(heading_t *h, const imu_sample_t *s, uint32_t tic
     if (a > 1.99f || a < -1.99f || g > 490 || g < -490) clipped = true;
   }
   float z = accel ? accel[2] : s->accel[2] * 0.000061f;
-  bool level = a2 >= .81f && a2 <= 1.21f && z > 0 && z*z >= .98063f*a2;
+  /* Bias needs rest, not perfect level; permit up to 30 degrees of tilt. */
+  bool level = a2 >= .81f && a2 <= 1.21f && z > 0 && z*z >= .75f*a2;
   if (h->state == HEADING_CALIBRATING) {
     if (gap || clipped || !level || g2 > 9) { restart_window(h); return; }
     if (!h->count) h->start = tick;
@@ -100,10 +96,5 @@ void heading_update_calibrated(heading_t *h, const imu_sample_t *s, uint32_t tic
   h->direction_valid = forward_x*forward_x + forward_y*forward_y >= .030154f;
   if (!h->direction_valid) return;
   h->yaw_deg = atan2f(forward_y, forward_x)*57.29578f;
-  float relative = -h->yaw_deg;
-  float delta = wrap(relative - h->sector * 45.0f);
-  if (delta > 25.5f || delta < -25.5f) { /* 3-degree sector hysteresis */
-    if (relative < 0) relative += 360;
-    h->sector = (unsigned)((relative + 22.5f) / 45) % 8;
-  }
+  h->sector = matrix_sector(-h->yaw_deg,h->sector);
 }

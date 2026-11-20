@@ -80,7 +80,7 @@ class Compass:
         field = self.transform(self.points[-1])
         return tilt_heading(field, accel, self.calibration['field_uT'], up)
 
-    def draw_heading(self, canvas, accel, imu_tick, imu_age, up=None, fused=None):
+    def draw_heading(self, canvas, accel, imu_tick, imu_age, up=None, fused=None, target='N'):
         heading, reason = fused if fused is not None else self.heading(accel, imu_tick, imu_age, up)
         canvas.delete('all')
         width, height = canvas.winfo_width(), canvas.winfo_height()
@@ -95,7 +95,8 @@ class Compass:
             angle = math.radians(heading)
             end = (cx-r*.8*math.sin(angle), cy-r*.8*math.cos(angle))
             canvas.create_line(cx, cy, *end, arrow='last', width=3, fill='#ff7979')
-            canvas.create_text(end[0], end[1]-10, text='N', fill='#ff7979')
-            title = f'{"Fused" if fused is not None else "Magnetic"} heading {heading:.1f} deg'
+            canvas.create_text(end[0], end[1]-10, text=target, fill='#ff7979')
+            title = (f'Home relative {((heading+180)%360-180):.1f} deg CCW' if target == 'H' else
+                     f'{"Fused" if fused is not None else "Magnetic"} heading {heading:.1f} deg')
         canvas.create_text(cx, 12, text=title, fill='white' if heading is not None else '#ffcc66')
         canvas.create_text(cx, height-13, text=reason, fill='#b9c8d9', width=max(100,width-12))

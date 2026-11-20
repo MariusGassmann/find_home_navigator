@@ -93,6 +93,21 @@ class OrientationTests(unittest.TestCase):
 
 
 class CalibrationTests(unittest.TestCase):
+    def test_moderately_tilted_reference_without_preview(self):
+        from math import sin, cos, radians
+        for tilt in (10, 25, 40):
+            model = Attitude()
+            a = (0, sin(radians(tilt)), cos(radians(tilt)))
+            model.update(sample(0, accel=a))
+            self.assertEqual(model.q, (1., 0., 0., 0.))
+            self.assertFalse(model.ready)
+            model.reference()
+            for i in range(1, 132):
+                model.update(sample(i, accel=a))
+            self.assertEqual(model.ready, tilt < 30)
+            if model.ready:
+                self.assertAlmostEqual(euler(model.q)[0], tilt, places=3)
+
     def test_must_start_explicitly(self):
         model = Attitude()
         for i in range(200):

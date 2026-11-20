@@ -32,6 +32,7 @@ class FusionTests(unittest.TestCase):
         self.assertIsNone(f.angles[1])
         self.assertTrue(f.update('FUSE,1000,UNRELIABLE,3000,3000,3000,0,0'))
         self.assertIsNone(f.heading()[0])
+
         f.last_data -= 1
         self.assertIn('fresh',f.heading()[1])
         for line in ('FUSE,1,BOGUS,0,0,0,0,0','FUSE,1,TRACKING,360000,0,0,0,1',
@@ -41,6 +42,17 @@ class FusionTests(unittest.TestCase):
         self.assertTrue(f.update(f'FUSE,10,WAITING,{MISSING},{MISSING},{MISSING},0,0'))
         self.assertFalse(f.history)
         self.assertIsNone(f.heading()[0])
+
+    def test_onboard_bias_progress_and_old_captures(self):
+        f=Fusion()
+        prefix=f'FUSE,1000,CALIBRATING,{MISSING},{MISSING},{MISSING},0,0'
+        for ms in (0, 750, 1900, 2000):
+            self.assertTrue(f.update(prefix+f',{ms}'))
+            self.assertEqual(f.bias_ms,ms)
+        for suffix in (',-1',',2001',',bad',',0,0'):
+            self.assertFalse(f.update(prefix+suffix))
+        self.assertTrue(f.update(prefix))
+        self.assertIsNone(f.bias_ms)
 
     def test_calibration_export_is_reproducible_and_rejects_bad_inputs(self):
         a, m = ROOT/'calibration/imu_accel.json', ROOT/'calibration/mag.json'

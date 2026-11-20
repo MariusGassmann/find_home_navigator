@@ -35,11 +35,13 @@ int gnss_test(void) {
   CHECK(g.lat_e7 == 481173000 && g.lon_e7 == 115166667);
   CHECK(g.quality == 1 && g.satellites == 8 && g.hdop_x100 == 90);
   CHECK(gnss_fresh(&g, 2100) && !gnss_fresh(&g, 2101));
+  CHECK(sentence(&g,fix,1500) && g.fixes==1 && g.updated==100);
+  CHECK(sentence(&g,fix,2200) && !gnss_fresh(&g,2200));
   CHECK(!strcmp(g.line, "$GNGGA,123519,4807.038,N,01131.000,E,1,08,0.9,545.4,M,46.9,M,,*59"));
   CHECK(sentence(&g, "GPGGA,000000,9000.000,S,18000.000,W,2,12,1.23,0,M,0,M,,", 0xfffffff0U));
   CHECK(g.lat_e7 == -900000000 && g.lon_e7 == -1800000000 && g.hdop_x100 == 123);
   CHECK(gnss_fresh(&g, 10) && !gnss_fresh(&g, 3000));
-  CHECK(sentence(&g, "GPGGA,000000,0000,N,00000,E,4,08,1,0,M,0,M,,", 100));
+  CHECK(sentence(&g, "GPGGA,000001,0000,N,00000,E,4,08,1,0,M,0,M,,", 100));
   CHECK(g.valid && g.lat_e7 == 0 && g.lon_e7 == 0);
   CHECK(sentence(&g, "GNGGA,000000,,,,,0,00,,,,,,,", 200));
   CHECK(!g.valid && g.quality == 0 && g.satellites == 0);

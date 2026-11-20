@@ -7,6 +7,7 @@ typedef struct {
   char line[160];
   unsigned used;
   uint32_t good, bad, fixes, updated;
+  uint32_t utc_ms; /* GGA UTC time of day; distinguishes repeated epochs. */
   uint32_t ubx_good, ubx_bad;
   uint16_t ubx_left;
   uint8_t ubx_phase, ck_a, ck_b, received_a;

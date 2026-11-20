@@ -64,6 +64,10 @@ int mag_test(void) {
   CHECK(mag_init(&bus, &check) && registers[0x0a] == 5);
   reset(); reset_busy = ignore_clear = true;
   CHECK(!mag_init(&bus, &check) && check.operation == 'V' && check.reg == 0x0b);
+  reset(); CHECK(mag_init(&bus,&check));
+  CHECK(mag_suspend(&bus) && registers[0x0a] == 0);
+  fail_at = calls+1; CHECK(!mag_suspend(&bus)); fail_at = 0;
+  CHECK(mag_init(&bus,&check));
   reset(); mag_sample_t sample;
   CHECK(mag_read(&bus, &sample) == 0 && calls == 1);
   fail_at = calls+1; CHECK(mag_read(&bus, &sample) == -1);

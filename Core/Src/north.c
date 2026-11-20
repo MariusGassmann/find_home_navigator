@@ -6,7 +6,11 @@ static float wrap(float a) {
   while (a < -180) a += 360;
   return a;
 }
-static float positive(float a) { a = wrap(a); return a < 0 ? a+360 : a; }
+static float positive(float a) {
+  a = wrap(a);
+  if (a < 0) a += 360;
+  return a >= 360 ? 0 : a; /* Tiny negative angles can round up to 360 in float. */
+}
 
 void north_init(north_t *n, const north_calibration_t *cal) {
   *n = (north_t){.cal = cal};
@@ -114,8 +118,7 @@ matrix_frame_t north_display(north_t *n, uint32_t tick) {
   }
   if (state != NORTH_TRACKING && state != NORTH_COASTING)
     return (matrix_frame_t){.red = 0x525}; /* 3x3 X; fourth column off. */
-  float delta = wrap(n->fused-n->sector*45.0f);
-  if (fabsf(delta) > 25.5f) n->sector = (unsigned)((n->fused+22.5f)/45) % 8;
+  n->sector = matrix_sector(n->fused,n->sector);
   matrix_frame_t frame = matrix_pointer(n->sector);
   if (state == NORTH_COASTING) frame.red |= frame.green;
   return frame;

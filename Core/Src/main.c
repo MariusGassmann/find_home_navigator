@@ -1,7 +1,7 @@
 /* USER CODE BEGIN Header */
 /**
  * @file main.c
- * @brief Find Home sensor diagnostics
+ * @brief Find Home navigator
  * @author Philipp Schilk, 2023
  */
 /* USER CODE END Header */
@@ -11,7 +11,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "imu_test.h"
-#include "sensor_test.h"
+#include "app.h"
 #include <stdio.h>
 /* USER CODE END Includes */
 
@@ -86,8 +86,8 @@ int main(void)
   MX_I2C1_Init();
   /* USER CODE BEGIN 2 */
 
-#ifdef FIND_HOME_SENSOR_TEST
-  sensor_test_run();
+#ifndef FIND_HOME_IMU_TEST
+  app_run();
 #else
   imu_test_run();
 #endif

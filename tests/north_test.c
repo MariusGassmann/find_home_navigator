@@ -61,6 +61,19 @@ static uint32_t reference(north_t *n, const north_calibration_t *cal, float yaw,
 
 int north_test(void) {
   north_t n;
+  /* Reference at a real tilt, then align north without levelling the board. */
+  for (unsigned pose=0;pose<2;++pose) {
+    float R[3][3]; rotation(pose ? .65f : .3f, -.15f, 1.0f, R);
+    north_init(&n,&north_calibration); north_reference(&n);
+    imu_sample_t s=imu_sample(&north_calibration,R,0,0,0);
+    mag_sample_t m=mag_sample(&north_calibration,R);
+    for (unsigned i=0;i<130;++i) { north_imu(&n,&s,i*20); north_mag(&n,&m,i*20); }
+    if (pose) CHECK(n.imu.state==HEADING_CALIBRATING);
+    else {
+      CHECK(north_state(&n,2580)==NORTH_TRACKING);
+      CHECK(fabsf(error(n.fused,-57.29578f))<.2f);
+    }
+  }
   north_init(&n, &identity);
   CHECK(north_state(&n,0)==NORTH_WAITING);
   CHECK(north_display(&n,0).red==0x525 && north_display(&n,0).green==0);
@@ -121,6 +134,13 @@ int north_test(void) {
   /* Calibration and timestamp wrap, plus no false north before alignment. */
   tick=reference(&n,&identity,0,UINT32_MAX-2100);
   CHECK(north_state(&n,tick)==NORTH_TRACKING);
+  /* Very small residual rates must never produce 360000 mdeg telemetry. */
+  tick=reference(&n,&identity,0,0);
+  n.imu.bias_raw[2]=-.001f;
+  float flat[3][3]; rotation(0,0,0,flat);
+  imu_sample_t tiny=imu_sample(&identity,flat,0,0,0);
+  north_imu(&n,&tiny,tick);
+  CHECK(n.fused>=0 && n.fused<360 && n.gyro>=0 && n.gyro<360);
   north_reference(&n);
   CHECK(!n.aligned && north_state(&n,0)==NORTH_UNRELIABLE);
   float R[3][3]; rotation(0,0,0,R);

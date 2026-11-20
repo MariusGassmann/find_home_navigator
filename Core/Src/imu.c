@@ -31,6 +31,15 @@ bool imu_init(const imu_bus_t *b, imu_config_t *c) {
   return true;
 }
 
+bool imu_suspend(const imu_bus_t *b) {
+  for (uint8_t reg = 0x10; reg <= 0x11; ++reg) {
+    uint8_t value;
+    if (!b->write(b->context, reg, 0) || !b->read(b->context, reg, &value, 1) || value != 0)
+      return false;
+  }
+  return true;
+}
+
 int imu_read(const imu_bus_t *b, imu_sample_t *s) {
   uint8_t status, raw[12];
   if (!b->read(b->context, 0x1e, &status, 1)) return -1;

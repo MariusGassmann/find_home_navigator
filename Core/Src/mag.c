@@ -31,6 +31,11 @@ bool mag_init(const mag_bus_t *b, mag_check_t *check) {
   return true;
 }
 
+bool mag_suspend(const mag_bus_t *b) {
+  mag_check_t check;
+  return write_reg(b, 0x0a, 0, &check) && expect(b, 0x0a, 0, &check);
+}
+
 int mag_read(const mag_bus_t *b, mag_sample_t *s) {
   *s = (mag_sample_t){0};
   if (!b->read(b->context, 0x09, &s->status, 1)) return -1;

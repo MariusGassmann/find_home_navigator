@@ -15,6 +15,7 @@ typedef struct { char operation; uint8_t reg, expected, actual; } mag_check_t;
    +/-8 gauss, 3750 counts/gauss = 37.5 counts/microtesla. Not calibrated. */
 /* On failure, check identifies the read/write/mismatch and register. */
 bool mag_init(const mag_bus_t *bus, mag_check_t *check);
+bool mag_suspend(const mag_bus_t *bus);
 /* -1: transport error, 0: no new sample, 1: fresh, 2: overflow (unusable). */
 int mag_read(const mag_bus_t *bus, mag_sample_t *sample);
 #endif

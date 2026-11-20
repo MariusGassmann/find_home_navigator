@@ -58,6 +58,30 @@ static bool coordinate(const char *s, const char *hemisphere, bool latitude, int
   return true;
 }
 
+static bool utc(const char *s, uint32_t *out) {
+  if (strlen(s) < 6) return false;
+  unsigned part[3] = {0};
+  for (unsigned i = 0; i < 6; ++i) {
+    if (s[i] < '0' || s[i] > '9') return false;
+    part[i/2] = part[i/2]*10 + (unsigned)(s[i]-'0');
+  }
+  if (part[0] > 23 || part[1] > 59 || part[2] > 59) return false;
+  s += 6;
+  unsigned fraction = 0, digits = 0;
+  if (*s == '.') {
+    ++s;
+    if (*s < '0' || *s > '9') return false;
+    while (*s >= '0' && *s <= '9') {
+      if (digits < 3) fraction = fraction*10 + (unsigned)(*s-'0');
+      ++digits; ++s;
+    }
+  }
+  if (*s) return false;
+  while (digits++ < 3) fraction *= 10;
+  *out = ((part[0]*60+part[1])*60+part[2])*1000+fraction;
+  return true;
+}
+
 static void position(gnss_t *g, uint32_t now) {
   char copy[sizeof g->line];
   strcpy(copy, g->line);
@@ -84,12 +108,17 @@ static void position(gnss_t *g, uint32_t now) {
   g->quality = quality/100; g->satellites = satellites/100;
   if (!quality) return; /* Empty position/HDOP fields are normal before a fix. */
   int32_t lat, lon;
+  uint32_t epoch;
   if (!decimal(fields[8], &hdop) || !hdop || hdop > 99999 ||
       !coordinate(fields[2], fields[3], true, &lat) ||
-      !coordinate(fields[4], fields[5], false, &lon)) { ++g->bad; return; }
+      !coordinate(fields[4], fields[5], false, &lon) ||
+      !utc(fields[1], &epoch)) { ++g->bad; return; }
   g->hdop_x100 = hdop;
   if (quality != 100 && quality != 200 && quality != 400 && quality != 500) return;
+  /* Duplicate talker messages or a frozen receiver must not refresh position age. */
+  if (g->fixes && epoch == g->utc_ms) { g->valid = true; return; }
   g->lat_e7 = lat; g->lon_e7 = lon;
+  g->utc_ms = epoch;
   g->updated = now; ++g->fixes; g->valid = true;
 }
 

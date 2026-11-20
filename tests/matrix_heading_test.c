@@ -119,6 +119,9 @@ int matrix_heading_test(void) {
   heading_update(&h, &s, 2020); CHECK(h.state == HEADING_TRACKING);
   heading_reference(&h);
   for (unsigned i = 0; i < 200; ++i) heading_update(&h, &s, i*20);
+  CHECK(h.state == HEADING_TRACKING); /* Roughly 22-degree startup tilt is OK. */
+  s = rolled(40, 0, 0); heading_reference(&h);
+  for (unsigned i = 0; i < 200; ++i) heading_update(&h, &s, i*20);
   CHECK(h.state == HEADING_CALIBRATING && h.count == 0);
   s = still(); heading_reference(&h);
   for (unsigned i = 0; i <= 100; ++i) {

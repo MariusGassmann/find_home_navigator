@@ -38,7 +38,7 @@ def main():
                     if data:
                         log.write(data)
                         log.flush()
-                        if not data.startswith((b'RX,', b'MAG,', b'IMU,', b'FUSE,')):
+                        if not data.startswith((b'RX,', b'MAG,', b'IMU,', b'FUSE,', b'NAV,')):
                             print(data.decode('ascii', errors='replace'), end='', flush=True)
             except KeyboardInterrupt:
                 reason = 'ctrl_c'

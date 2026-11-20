@@ -102,7 +102,7 @@ class Attitude:
         self.ready = False
         self.calibrating = True
         self.window = []
-        self.message = 'Keep level and still for 2 s (gyro bias calibration)'
+        self.message = 'Hold still for 2 s; tilt up to 30 deg (gyro bias calibration)'
 
     def update(self, s):
         self.raw_accel = self.transform(s.accel)
@@ -122,11 +122,11 @@ class Attitude:
                 self.reference()
         self.last = s
         if self.calibrating:
-            # The reference assumes top up, within 8 degrees of level.
-            level = .9 <= norm(a) <= 1.1 and a[2] / norm(a) >= cos(radians(8))
+            # Bias calibration permits moderate tilt, matching onboard startup.
+            level = .9 <= norm(a) <= 1.1 and a[2] / norm(a) >= cos(radians(30))
             if not level or norm(g) > 3:
                 self.window = []
-                self.message = 'Calibration waiting: hold LEVEL and STILL (check axes)'
+                self.message = 'Calibration waiting: hold still, component side up, tilt <=30 deg'
                 return
             self.window.append(s)
             span = ((s.tick - self.window[0].tick) & 0xffffffff) / 1000
@@ -142,6 +142,10 @@ class Attitude:
                 return
             self.bias = mean  # Measured once; never auto-learned while navigating.
             self.q = (1., 0., 0., 0.)
+            if self.gain:
+                x, y, z = (v/norm(a) for v in a)
+                w = sqrt((1+z)/2)
+                self.q = (w, y/(2*w), -x/(2*w), 0.)
             self.elapsed = self.yaw_total = 0.
             self.ready, self.calibrating = True, False
             self.window = []

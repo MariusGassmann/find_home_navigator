@@ -9,6 +9,7 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from imu_model import Attitude, parse
 from imu_viewer import Session, serial_reader
+from navigation_view import Navigation
 
 
 class SerialCommandTests(unittest.TestCase):
@@ -53,6 +54,7 @@ class SerialCommandTests(unittest.TestCase):
             session.args = SimpleNamespace(port=port)
             session.log = None
             session.model = Attitude()
+            session.navigation = Navigation()
             session.commands = queue.Queue()
             session.reference()
             self.assertTrue(session.model.calibrating)

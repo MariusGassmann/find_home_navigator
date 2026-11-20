@@ -1,9 +1,14 @@
-#include "sensor_test.h"
+#include "app.h"
 #include "gnss.h"
 #include "mag.h"
 #include "imu_port.h"
 #include "north_calibration.h"
 #include "main.h"
+#ifdef FIND_HOME_NAVIGATOR
+#include "navigator.h"
+#include "power.h"
+#include <math.h>
+#endif
 #include <inttypes.h>
 #include <stdio.h>
 
@@ -53,6 +58,8 @@ static void uart_init(void) {
   gps.Init.HwFlowCtl = UART_HWCONTROL_NONE;
   gps.Init.OverSampling = UART_OVERSAMPLING_16;
   if (HAL_UART_Init(&gps) != HAL_OK) Error_Handler();
+  USART3->ICR = USART_ICR_ORECF | USART_ICR_FECF | USART_ICR_NCF | USART_ICR_PECF;
+  USART3->RQR = USART_RQR_RXFRQ;
   HAL_NVIC_SetPriority(USART3_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(USART3_IRQn);
   SET_BIT(USART3->CR3, USART_CR3_EIE);
@@ -89,12 +96,37 @@ static void raw_record(const uint8_t *data, unsigned size, uint32_t tick, uint32
   if (HAL_UART_Transmit(&huart2, (uint8_t *)line, (uint16_t)used, 30) != HAL_OK) Error_Handler();
 }
 
-void sensor_test_run(void) {
+#ifdef FIND_HOME_NAVIGATOR
+static void nav_record(const navigator_t *n, const gnss_t *g, uint32_t now) {
+  matrix_frame_t frame = navigator_display(n,now);
+  printf("NAV,%" PRIu32 ",%s,home_lat_e7=%" PRId32 ",home_lon_e7=%" PRId32
+         ",lat_e7=%" PRId32 ",lon_e7=%" PRId32 ",distance_cm=%" PRId32
+         ",bearing_mdeg=%" PRId32 ",relative_mdeg=%" PRId32
+         ",samples=%u,sat=%u,hdop_x100=%u,home=%u,declination_mdeg=%ld,red=%u,green=%u\r\n",
+         now,navigator_status(n),n->home_lat,n->home_lon,g->lat_e7,g->lon_e7,
+         n->position_valid ? (int32_t)(n->distance*100) : -1,
+         n->position_valid ? (int32_t)(n->bearing*1000) : INT32_MIN,
+         n->position_valid && n->heading_valid ? (int32_t)(n->relative*1000) : INT32_MIN,
+         n->count,g->satellites,g->hdop_x100,(unsigned)n->home_valid,
+         (long)(n->declination*1000),(unsigned)frame.red,(unsigned)frame.green);
+}
+#endif
+
+void app_run(void) {
   setvbuf(stdout, NULL, _IONBF, 0);
   huart2.Init.BaudRate = 460800;
   if (HAL_UART_Init(&huart2) != HAL_OK) Error_Handler();
-  printf("# SENSOR v6: GPS 115200, USB 460800; RX + MAG + IMU + FUSE\r\n");
+  printf("# SENSOR v7: GPS 115200, USB 460800; RX + MAG + IMU + FUSE\r\n");
+#ifdef FIND_HOME_NAVIGATOR
+  navigator_t nav;
+  navigator_init(&nav,(float)FIND_HOME_DECLINATION_DEG);
+  printf("# NAVIGATOR Enter/r: capture home, cancel capture, or sleep; wake with board Enter\r\n");
+  printf("# Declination east-positive mdeg=%ld; home is RAM-only and clears on reset\r\n",
+         (long)(nav.declination*1000));
+#else
   printf("# NORTH magnetic demo; Enter/r: level reference; calibration=" NORTH_CALIBRATION_ID "\r\n");
+#endif
+  printf("# Calibration=" NORTH_CALIBRATION_ID "\r\n");
   mag_bus_t bus = {&hi2c1, mag_read_reg, mag_write_reg, HAL_Delay};
   bool mag_ready = start_compass(&bus);
   imu_bus_t imu_bus = imu_port_init();
@@ -141,7 +173,13 @@ void sensor_test_run(void) {
       if (stable == GPIO_PIN_RESET) ++reference;
     }
     if (reference != prior_reference) {
+#ifdef FIND_HOME_NAVIGATOR
+      nav_state_t before = nav.state;
+      navigator_press(&nav,&g,now);
+      if (before == NAV_IDLE && nav.state == NAV_CAPTURE) north_reference(&north);
+#else
       north_reference(&north);
+#endif
       prior_reference = reference;
     }
     if (imu_ready) {
@@ -171,16 +209,29 @@ void sensor_test_run(void) {
       }
     }
     now = HAL_GetTick();
+#ifdef FIND_HOME_NAVIGATOR
+    north_state_t heading = north_state(&north,now);
+    bool heading_ok = heading == NORTH_TRACKING || heading == NORTH_COASTING;
+    navigator_update(&nav,&g,heading_ok ? north.fused : NAN,heading == NORTH_COASTING,now);
+    imu_port_display(navigator_display(&nav,now));
+#else
     imu_port_display(north_display(&north, now));
+#endif
     if ((uint32_t)(now-fusion_tick) >= 100) {
       fusion_tick = now;
-      printf("FUSE,%" PRIu32 ",%s,%" PRId32 ",%" PRId32 ",%" PRId32 ",%u,%u\r\n",
+      uint32_t bias_ms = north.imu.state == HEADING_TRACKING ? 2000 :
+          north.imu.state == HEADING_CALIBRATING && north.imu.count ? now-north.imu.start : 0;
+      if (bias_ms > 2000) bias_ms = 2000;
+      printf("FUSE,%" PRIu32 ",%s,%" PRId32 ",%" PRId32 ",%" PRId32 ",%u,%u,%" PRIu32 "\r\n",
              now, north_state_name(north_state(&north, now)),
              north.aligned ? (int32_t)(north.gyro*1000) : INT32_MIN,
              north.compass_valid && (uint32_t)(now-north.mag_tick) <= 100 ?
                  (int32_t)(north.compass*1000) : INT32_MIN,
              north.aligned ? (int32_t)(north.fused*1000) : INT32_MIN,
-             north.sector, (unsigned)(north.mag_used && (uint32_t)(now-north.mag_tick) <= 100));
+             north.sector, (unsigned)(north.mag_used && (uint32_t)(now-north.mag_tick) <= 100), bias_ms);
+#ifdef FIND_HOME_NAVIGATOR
+      nav_record(&nav,&g,now);
+#endif
     }
     if ((uint32_t)(now-last) >= 1000) {
       const char *state = received == prior_rx ? "NO_DATA" :
@@ -199,5 +250,29 @@ void sensor_test_run(void) {
              framing, noise, overrun, (unsigned)mag_ready, mag_sequence, mag_errors, mag_overflows);
       prior_rx = received; last = now;
     }
+#ifdef FIND_HOME_NAVIGATOR
+    if (nav.state == NAV_SLEEP) {
+      nav_record(&nav,&g,now);
+      printf("# POWER entering STOP2; GNSS stays powered; board Enter wakes\r\n");
+      HAL_NVIC_DisableIRQ(USART3_IRQn);
+      CLEAR_BIT(USART3->CR1,USART_CR1_UE);
+      HAL_NVIC_ClearPendingIRQ(USART3_IRQn);
+      power_sleep(&imu_bus,&bus);
+      /* Discard all pre-sleep input, position and attitude. RAM home survives. */
+      head = tail = 0; size = 0; g = (gnss_t){0};
+      imu_bus = imu_port_init();
+      imu_ready = imu_init(&imu_bus,&config);
+      mag_ready = start_compass(&bus);
+      uart_init();
+      printf("# RX_LOSS wake; discarded sleep input; IMU init=%u\r\n",(unsigned)imu_ready);
+      now = HAL_GetTick();
+      navigator_press(&nav,&g,now);
+      north_reference(&north);
+      ++reference; prior_reference = reference;
+      previous = stable = GPIO_PIN_RESET; changed = now;
+      last = raw_tick = mag_tick = fusion_tick = now; prior_rx = received;
+    }
+#endif
+    __WFI(); /* Active-mode idle: next UART byte or 1 ms SysTick resumes polling. */
   }
 }

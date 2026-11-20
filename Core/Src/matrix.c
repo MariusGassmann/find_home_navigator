@@ -1,4 +1,13 @@
 #include "matrix.h"
+#include <math.h>
+
+unsigned matrix_sector(float angle, unsigned previous) {
+  float delta = remainderf(angle-previous*45.0f, 360);
+  if (fabsf(delta) <= 25.5f) return previous;
+  angle = fmodf(angle, 360);
+  if (angle < 0) angle += 360;
+  return (unsigned)((angle+22.5f)/45) % 8;
+}
 
 matrix_frame_t matrix_pointer(unsigned sector) {
   /* Forward, forward-left, left, back-left, back, back-right, right, forward-right. */
