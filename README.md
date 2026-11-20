@@ -2,7 +2,8 @@
 
 STM32 NUCLEO-L476RG, ETH PBL Shield rev 1.2, LSM6DSV16BX IMU and HGLRC
 M100-5883 GNSS/QMC5883P compass. Sensors, calibration, visualization and the
-LED matrix diagnostic work. Home capture, navigation and sleep/wake are next.
+LED north demo work, including onboard gyro/compass fusion. Home capture,
+navigation and sleep/wake are next.
 
 ## Build and flash
 
@@ -22,17 +23,21 @@ From the project root, using the existing Conda environment:
 ```powershell
 conda activate find-home
 python -m pip install -r tools/requirements.txt
-python tools/imu_viewer.py --port COM3 --compass --accel-cal calibration/imu_accel.json --mag-cal calibration/mag.json --mag-axes=y,x,-z --log captures/session.txt
+python tools/imu_viewer.py --port COM3 --compass --accel-cal calibration/imu_accel.json --mag-cal calibration/mag.json --mag-axes=y,x,-z --log captures/north-demo.txt
 ```
 
 Close other serial monitors first. Press board RESET, hold level and still,
 press Enter, and wait two seconds for the gyro reference. The 3D board shows
-relative gyro/gravity orientation; the compass dial shows tilt-compensated
-magnetic heading. XYZ field plots remain in sensor axes. Board +X points toward
-POTI. See [hardware/frames](docs/hardware.md) and [heading](docs/compass_heading.md).
+relative gyro/gravity orientation; the dial and LED arrow show the STM32's fused
+magnetic heading. A time plot compares anchored gyro, compass and fused heading.
+XYZ field plots remain in sensor axes. Board +X points toward POTI.
+See [north demo/test steps](docs/north_demo.md), [hardware/frames](docs/hardware.md)
+and [tilt compensation](docs/compass_heading.md).
 
 Useful options: `--gyro-only` disables gravity correction; `--no-bias` disables
-gyro bias subtraction; omit `--accel-cal` to compare raw acceleration.
+gyro bias subtraction; omit `--accel-cal` to compare raw acceleration. These
+options affect the laptop estimate; onboard fusion always uses saved calibration,
+gravity correction and measured gyro bias.
 `--demo` replaces the port with simulated IMU motion; `--replay captures/session.txt`
 replays a log with the same calibration/axes options. `--headless --seconds 60`
 records without a window. Escape closes the viewer. Logs remain raw and include
@@ -54,12 +59,15 @@ Keep `calibration/` versioned. Raw captures and build outputs stay local.
 
 ## Firmware modules and checks
 
-`Core/Src/imu.c`, `mag.c`, `gnss.c`, `heading.c` and `matrix.c` contain the reusable
+`Core/Src/imu.c`, `mag.c`, `gnss.c`, `heading.c`, `north.c` and `matrix.c` contain the reusable
 drivers/math. `imu_port.c` owns shield SPI2. `sensor_test.c` is the current combined
 bench loop. `imu_test.c` retains the standalone onboard IMU/LED pointer test;
 select it with `cmake --preset Debug -DFIND_HOME_SENSOR_TEST=OFF`, then rebuild.
 Its viewer connection is 115200 baud without `--compass`; T walks all LED pixels.
 Restore the combined bench with `-DFIND_HOME_SENSOR_TEST=ON` and rebuild.
+The combined build generates calibration constants from the two JSON files;
+Python 3 must be available during configuration/build. No extra Python packages
+are needed for this export.
 
 ```powershell
 python -m pip install -r tests/requirements.txt

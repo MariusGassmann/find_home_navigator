@@ -26,9 +26,13 @@ elf, binary = output/'test.elf', output/'test.bin'
 script = output/'test.ld'
 script.write_text('ENTRY(test_main)\nSECTIONS { . = 0x10000; .text : { *(.text*) *(.rodata*) } '
                   '.data : { *(.data*) } .bss : { *(.bss*) *(COMMON) } end = .; }\n')
+subprocess.run([sys.executable, str(root/'tools/export_calibration.py'),
+                str(root/'calibration/imu_accel.json'), str(root/'calibration/mag.json'),
+                str(output/'north_calibration.h')], check=True)
 subprocess.run([gcc, '-mcpu=cortex-m4', '-mthumb', '-mfloat-abi=soft', '-O1',
                 '-ffreestanding', '-fno-builtin', '-nostdlib', '--specs=nano.specs',
                 '-Wall', '-Wextra', '-Werror',
+                '-I', str(output), str(root/'Core/Src/north.c'), str(root/'tests/north_test.c'),
                 '-I', str(root/'Core/Inc'), str(root/'Core/Src/imu.c'),
                 str(root/'Core/Src/matrix.c'), str(root/'Core/Src/heading.c'),
                 str(root/'Core/Src/gnss.c'), str(root/'tests/gnss_test.c'),
@@ -44,11 +48,13 @@ cpu.mem_write(0x10000, binary.read_bytes())
 cpu.mem_map(0x20000000, 0x10000)
 cpu.reg_write(UC_ARM_REG_SP, 0x20010000)
 cpu.reg_write(UC_ARM_REG_LR, 0x1f001)
-cpu.emu_start(entry | 1, 0x1f000, timeout=30000000, count=100000000)
+cpu.emu_start(entry | 1, 0x1f000, timeout=60000000, count=300000000)
 if cpu.reg_read(UC_ARM_REG_PC) != 0x1f000:
     sys.exit('ARM driver test timed out')
 result = cpu.reg_read(UC_ARM_REG_R0)
 if result:
+    if result >= 4000:
+        sys.exit(f'ARM north fusion CHECK failed at tests/north_test.c:{result-4000}')
     if result >= 3000:
         sys.exit(f'ARM magnetometer CHECK failed at tests/mag_test.c:{result-3000}')
     if result >= 2000:
@@ -65,6 +71,8 @@ print('PASS: GGA checksums, coordinates, hemispheres, limits, fix loss, freshnes
       'malformed fields, long/partial/binary frames and 1,000 noisy-stream recoveries')
 print('PASS: QMC5883P identity, reset, configuration readback, fresh/overflow/error paths; '
       'all 65,536 signed patterns on each axis')
+print('PASS: calibrated north fusion: bias drift, tilted turns, north crossing, '
+      'spike rejection, compass fallback/recovery, LED states and clock wrap')
 
 if args.captures:
     replay = next(int(line.split()[0], 16) for line in symbols.splitlines() if line.endswith(' gnss_replay'))

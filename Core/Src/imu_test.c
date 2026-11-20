@@ -8,17 +8,8 @@
 
 extern UART_HandleTypeDef huart2;
 
-static void show_matrix(matrix_frame_t frame) {
-  static matrix_frame_t previous = {UINT16_MAX, UINT16_MAX};
-  if (frame.red == previous.red && frame.green == previous.green) return;
-  uint8_t bytes[3];
-  matrix_encode(frame, bytes);
-  imu_port_matrix(bytes);
-  previous = frame;
-}
-
 static void fatal(void) {
-  show_matrix((matrix_frame_t){.red = 0xfff});
+  imu_port_display((matrix_frame_t){.red = 0xfff});
   Error_Handler();
 }
 
@@ -26,7 +17,7 @@ static void fatal(void) {
 void imu_test_run(void) {
   setvbuf(stdout, NULL, _IONBF, 0);
   imu_bus_t bus = imu_port_init();
-  show_matrix((matrix_frame_t){0});
+  imu_port_display((matrix_frame_t){0});
   imu_config_t config;
   HAL_Delay(20);
   if (!imu_init(&bus, &config)) {
@@ -84,7 +75,7 @@ void imu_test_run(void) {
     else if (heading.state == HEADING_INVALID) frame.red = 0xfff;
     else if (heading.state == HEADING_CALIBRATING && (now / 250) % 2)
       frame.red = frame.green = 0x060; /* Amber center pair while collecting bias. */
-    show_matrix(frame);
+    imu_port_display(frame);
     if (heading.state != reported ||
         (heading.state == HEADING_TRACKING && (uint32_t)(now - last_report) >= 1000)) {
       static const char *const states[] = {"WAITING", "CALIBRATING", "TRACKING", "INVALID"};

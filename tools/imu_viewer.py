@@ -9,6 +9,7 @@ import time
 from imu_model import BOARD_AXES, Attitude, Demo, euler, norm, parse, rotate
 from imu_calibration import load as load_accel_calibration
 from compass_view import Compass
+from fusion_view import Fusion
 
 
 def serial_reader(port, lines, commands, stop, baud=115200):
@@ -53,6 +54,7 @@ class Session:
             from mag_calibration import load
             magnetic_cal = load(args.mag_cal)
         self.compass = Compass(magnetic_cal, getattr(args, 'mag_axes', None))
+        self.fusion = Fusion()
         self.demo = Demo() if args.demo else None
         self.replay = None
         self.log = None
@@ -100,6 +102,10 @@ class Session:
             if not self.compass.update(line):
                 self.bad += 1
             return
+        if line.startswith('FUSE,'):
+            if not self.fusion.update(line):
+                self.bad += 1
+            return
         if line.startswith(('RX,', 'GNSS,')) or not line.strip():
             return
         sample = parse(line)
@@ -142,6 +148,8 @@ class Session:
                     accel_offset_g=m.accel_offset, accel_scale=m.accel_scale,
                     mag_axes=self.compass.axes, magnetic_heading_deg=magnetic_heading,
                     magnetic_heading_status=magnetic_status,
+                    firmware_fusion_state=self.fusion.state,
+                    firmware_gyro_compass_fused_deg=self.fusion.angles,
                     compass_samples=self.compass.samples, compass_overflows=self.compass.overflows,
                     status=m.message)
 
@@ -164,7 +172,7 @@ def gui(session):
     from tkinter import ttk
     root = tk.Tk()
     root.title('Find Home — sensor bench | Enter = level reference')
-    root.geometry('1100x900' if session.compass.axes else '1000x760')
+    root.geometry('1100x1000' if session.compass.axes else '1000x760')
     controls = ttk.Frame(root, padding=10)
     controls.pack(fill='x')
     ttk.Button(controls, text='Start / reference (Enter)', command=session.reference).pack(side='left')
@@ -180,16 +188,18 @@ def gui(session):
     magnetic = tk.Canvas(magnetic_frame, bg='#142032', height=240, highlightthickness=0)
     dial = tk.Canvas(magnetic_frame, bg='#142032', width=280, height=240, highlightthickness=0)
     magnetic_text = tk.StringVar()
+    fusion = tk.Canvas(root, bg='#142032', height=145, highlightthickness=0)
     if session.args.compass:
         magnetic_frame.pack(fill='x')
         if session.compass.axes:
             dial.pack(side='right', fill='y')
         magnetic.pack(side='left', fill='both', expand=True)
         ttk.Label(root, textvariable=magnetic_text, padding=4).pack(fill='x')
+        fusion.pack(fill='x')
     readings = tk.StringVar()
     ttk.Label(root, textvariable=readings, font=('Consolas', 11), padding=10).pack(fill='x')
     ttk.Label(root, text='Board +X points toward POTI. Yaw is relative to start. '
-              'Keep still to measure drift. Compass plots use sensor axes; yaw has no magnetic correction.'
+              '3D view: relative gyro/gravity. Dial and comparison: STM32 fused magnetic heading. Field plots: sensor axes.'
               if session.args.compass else
               'Board +X points toward POTI. Yaw is relative to start. T: LED test; Enter: reference.', padding=8).pack(fill='x')
     root.bind('<Return>', lambda _: session.reference())
@@ -203,13 +213,15 @@ def gui(session):
         stale = session.last_data is None or time.monotonic()-session.last_data > .5
         state.set(('NO FRESH DATA — ' if stale else '') + m.message)
         if session.args.compass:
+            session.fusion.draw(fusion)
             session.compass.draw(magnetic)
             magnetic_text.set(session.compass.text() +
                               (f' | board axes: {session.compass.axes}'
                                if session.compass.axes else ''))
             if session.compass.axes:
                 age = time.monotonic()-session.last_data if session.last_data is not None else float('inf')
-                session.compass.draw_heading(dial, m.accel, m.last.tick if m.last else None, age, m.up_vector())
+                session.compass.draw_heading(dial, m.accel, m.last.tick if m.last else None, age, m.up_vector(),
+                                            session.fusion.heading() if session.fusion.state is not None else None)
         canvas.delete('all')
         width, height = canvas.winfo_width(), canvas.winfo_height()
         scale = min(width, height)*.47

@@ -18,8 +18,17 @@ add_subdirectory(cmake/stm32cubemx)
 # SPI2 initialization belongs to imu_port.c rather than generated CubeMX code.
 target_compile_definitions(stm32cubemx INTERFACE HAL_SPI_MODULE_ENABLED)
 if(FIND_HOME_SENSOR_TEST)
+    find_package(Python3 REQUIRED COMPONENTS Interpreter)
+    set(CALIBRATION_HEADER ${CMAKE_CURRENT_BINARY_DIR}/generated/north_calibration.h)
+    add_custom_command(OUTPUT ${CALIBRATION_HEADER}
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/export_calibration.py
+            ${CMAKE_CURRENT_SOURCE_DIR}/calibration/imu_accel.json
+            ${CMAKE_CURRENT_SOURCE_DIR}/calibration/mag.json ${CALIBRATION_HEADER}
+        DEPENDS tools/export_calibration.py calibration/imu_accel.json calibration/mag.json
+        VERBATIM)
+    target_include_directories(${PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
     target_compile_definitions(${PROJECT_NAME} PRIVATE FIND_HOME_SENSOR_TEST)
-    target_sources(${PROJECT_NAME} PRIVATE Core/Src/sensor_test.c)
+    target_sources(${PROJECT_NAME} PRIVATE Core/Src/sensor_test.c Core/Src/north.c ${CALIBRATION_HEADER})
 else()
     target_sources(${PROJECT_NAME} PRIVATE Core/Src/imu_test.c)
 endif()

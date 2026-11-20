@@ -14,6 +14,9 @@ the horizontal plane and normalize it as forward `f`; horizontal left is
 [0,360), clockwise from magnetic north. The dial fixes POTI/forward at the top
 and points its N needle toward north. The 3D slab uses gyro/gravity only; magnetic
 readings do not feed back into its orientation. No declination correction yet.
+The current [north demo](north_demo.md) performs this calculation onboard and
+corrects a separate fused heading with the compass. Its telemetry drives the
+viewer dial; old captures still use the Python calculation described here.
 
 Heading is unavailable without a valid reference, calibration or mounting,
 after overflow, with sensor age >0.5 s or timestamp separation >100 ms, field

@@ -62,7 +62,11 @@ imu_bus_t imu_port_init(void) {
   return (imu_bus_t){&spi, read_reg, write_reg, HAL_Delay};
 }
 
-void imu_port_matrix(uint8_t bytes[3]) {
+void imu_port_display(matrix_frame_t frame) {
+  static matrix_frame_t previous = {UINT16_MAX, UINT16_MAX};
+  if (frame.red == previous.red && frame.green == previous.green) return;
+  uint8_t bytes[3];
+  matrix_encode(frame, bytes);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_12, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_RESET);
   if (HAL_SPI_Transmit(&spi, bytes, 3, 20) != HAL_OK) {
@@ -70,4 +74,5 @@ void imu_port_matrix(uint8_t bytes[3]) {
   }
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_SET);
   HAL_GPIO_WritePin(GPIOB, GPIO_PIN_11, GPIO_PIN_RESET);
+  previous = frame;
 }

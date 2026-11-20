@@ -16,4 +16,7 @@ typedef struct {
 void heading_reference(heading_t *heading);
 /* Level reference, then 3D gyro integration with gravity correction. */
 void heading_update(heading_t *heading, const imu_sample_t *sample, uint32_t tick);
+/* Optional calibrated acceleration in sensor axes, g; clipping still checks raw data. */
+void heading_update_calibrated(heading_t *heading, const imu_sample_t *sample,
+                               uint32_t tick, const float accel[3]);
 #endif

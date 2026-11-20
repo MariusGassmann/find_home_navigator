@@ -51,7 +51,7 @@ class Compass:
     def draw(self, canvas):
         canvas.delete('all')
         width, height = canvas.winfo_width(), canvas.winfo_height()
-        canvas.create_text(width/2, 15, text=('Corrected' if self.calibration else 'Raw') + ' field [uT] - sensor axes; no heading fusion', fill='white')
+        canvas.create_text(width/2, 15, text=('Corrected' if self.calibration else 'Raw') + ' field [uT] - sensor axes', fill='white')
         bound = max(60, max((abs(v) for p in self.points for v in p), default=0)*1.1)
         radius = min(width/6-25, (height-65)/2)
         for panel, (a, b, label) in enumerate(((0,1,'XY'), (0,2,'XZ'), (1,2,'YZ'))):
@@ -80,8 +80,8 @@ class Compass:
         field = self.transform(self.points[-1])
         return tilt_heading(field, accel, self.calibration['field_uT'], up)
 
-    def draw_heading(self, canvas, accel, imu_tick, imu_age, up=None):
-        heading, reason = self.heading(accel, imu_tick, imu_age, up)
+    def draw_heading(self, canvas, accel, imu_tick, imu_age, up=None, fused=None):
+        heading, reason = fused if fused is not None else self.heading(accel, imu_tick, imu_age, up)
         canvas.delete('all')
         width, height = canvas.winfo_width(), canvas.winfo_height()
         cx, cy = width/2, height/2+2
@@ -96,6 +96,6 @@ class Compass:
             end = (cx-r*.8*math.sin(angle), cy-r*.8*math.cos(angle))
             canvas.create_line(cx, cy, *end, arrow='last', width=3, fill='#ff7979')
             canvas.create_text(end[0], end[1]-10, text='N', fill='#ff7979')
-            title = f'Magnetic heading {heading:.1f} deg'
+            title = f'{"Fused" if fused is not None else "Magnetic"} heading {heading:.1f} deg'
         canvas.create_text(cx, 12, text=title, fill='white' if heading is not None else '#ffcc66')
         canvas.create_text(cx, height-13, text=reason, fill='#b9c8d9', width=max(100,width-12))

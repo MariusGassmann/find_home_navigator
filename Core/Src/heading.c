@@ -1,5 +1,6 @@
 #include "heading.h"
 #include <math.h>
+#include <stddef.h>
 
 static float wrap(float angle) {
   while (angle >= 180) angle -= 360;
@@ -17,6 +18,11 @@ void heading_reference(heading_t *h) {
 }
 
 void heading_update(heading_t *h, const imu_sample_t *s, uint32_t tick) {
+  heading_update_calibrated(h, s, tick, NULL);
+}
+
+void heading_update_calibrated(heading_t *h, const imu_sample_t *s, uint32_t tick,
+                               const float accel[3]) {
   uint32_t dt = tick - h->tick;
   bool gap = h->timed && (dt == 0 || dt > 100);
   h->tick = tick;
@@ -26,10 +32,11 @@ void heading_update(heading_t *h, const imu_sample_t *s, uint32_t tick) {
   bool clipped = false;
   for (unsigned i = 0; i < 3; ++i) {
     float a = s->accel[i] * 0.000061f, g = s->gyro[i] * 0.0175f;
-    a2 += a*a; g2 += g*g;
+    float corrected = accel ? accel[i] : a;
+    a2 += corrected*corrected; g2 += g*g;
     if (a > 1.99f || a < -1.99f || g > 490 || g < -490) clipped = true;
   }
-  float z = s->accel[2] * 0.000061f;
+  float z = accel ? accel[2] : s->accel[2] * 0.000061f;
   bool level = a2 >= .81f && a2 <= 1.21f && z > 0 && z*z >= .98063f*a2;
   if (h->state == HEADING_CALIBRATING) {
     if (gap || clipped || !level || g2 > 9) { restart_window(h); return; }
@@ -50,6 +57,12 @@ void heading_update(heading_t *h, const imu_sample_t *s, uint32_t tick) {
     }
     for (unsigned i = 0; i < 3; ++i) h->bias_raw[i] = (float)h->sum[i] / h->count;
     h->q[0] = 1;
+    if (accel) {
+      float norm = sqrtf(a2);
+      h->q[0] = sqrtf((1 + z/norm)*.5f);
+      h->q[1] = -accel[0]/(2*norm*h->q[0]);
+      h->q[2] = -accel[1]/(2*norm*h->q[0]);
+    }
     h->yaw_deg = 0; h->sector = 0; h->direction_valid = true;
     h->state = HEADING_TRACKING;
     return;
@@ -62,7 +75,8 @@ void heading_update(heading_t *h, const imu_sample_t *s, uint32_t tick) {
   float w = h->q[0], x = h->q[1], y = h->q[2], v = h->q[3];
   if (a2 >= .81f && a2 <= 1.21f) {
     float norm = sqrtf(a2);
-    float a[3] = {s->accel[1]*.000061f/norm, -s->accel[0]*.000061f/norm, z/norm};
+    float a[3] = {(accel ? accel[1] : s->accel[1]*.000061f)/norm,
+                 -(accel ? accel[0] : s->accel[0]*.000061f)/norm, z/norm};
     float up[3] = {2*(x*v-w*y), 2*(y*v+w*x), 1-2*(x*x+y*y)};
     /* Measured up cross predicted up; skip correction during large acceleration. */
     for (unsigned i = 0; i < 3; ++i)

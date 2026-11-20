@@ -2,6 +2,7 @@
 #include "gnss.h"
 #include "mag.h"
 #include "imu_port.h"
+#include "north_calibration.h"
 #include "main.h"
 #include <inttypes.h>
 #include <stdio.h>
@@ -92,11 +93,14 @@ void sensor_test_run(void) {
   setvbuf(stdout, NULL, _IONBF, 0);
   huart2.Init.BaudRate = 460800;
   if (HAL_UART_Init(&huart2) != HAL_OK) Error_Handler();
-  printf("# SENSOR v5: GPS 115200, USB 460800; RX hex + MAG + IMU raw sensor XYZ\r\n");
-  printf("# Enter/r: IMU reference\r\n");
+  printf("# SENSOR v6: GPS 115200, USB 460800; RX + MAG + IMU + FUSE\r\n");
+  printf("# NORTH magnetic demo; Enter/r: level reference; calibration=" NORTH_CALIBRATION_ID "\r\n");
   mag_bus_t bus = {&hi2c1, mag_read_reg, mag_write_reg, HAL_Delay};
   bool mag_ready = start_compass(&bus);
   imu_bus_t imu_bus = imu_port_init();
+  north_t north;
+  north_init(&north, &north_calibration);
+  imu_port_display(north_display(&north, HAL_GetTick()));
   imu_config_t config;
   bool imu_ready = imu_init(&imu_bus, &config);
   printf("# IMU init=%u ID=%02x expected=71\r\n", (unsigned)imu_ready, config.id);
@@ -106,7 +110,7 @@ void sensor_test_run(void) {
   gnss_t g = {0};
   uint32_t last = HAL_GetTick(), prior_rx = 0, prior_faults = 0;
   uint32_t offset = 0, mag_tick = last, mag_sequence = 0, mag_errors = 0, mag_overflows = 0;
-  uint32_t raw_tick = last;
+  uint32_t raw_tick = last, fusion_tick = last, prior_reference = 0;
   uint8_t chunk[128];
   unsigned size = 0;
   while (1) {
@@ -136,6 +140,10 @@ void sensor_test_run(void) {
       stable = pressed;
       if (stable == GPIO_PIN_RESET) ++reference;
     }
+    if (reference != prior_reference) {
+      north_reference(&north);
+      prior_reference = reference;
+    }
     if (imu_ready) {
       imu_sample_t sample;
       int result = imu_read(&imu_bus, &sample);
@@ -143,10 +151,12 @@ void sensor_test_run(void) {
         printf("# ERROR IMU SPI read; reset board\r\n");
         imu_ready = false;
       }
-      if (result > 0)
+      if (result > 0) {
+        north_imu(&north, &sample, HAL_GetTick());
         printf("IMU,%" PRIu32 ",%" PRIu32 ",%" PRIu32 ",%d,%d,%d,%d,%d,%d\r\n",
                HAL_GetTick(), imu_sequence++, reference, sample.accel[0], sample.accel[1],
                sample.accel[2], sample.gyro[0], sample.gyro[1], sample.gyro[2]);
+      }
     }
     if (mag_ready && (uint32_t)(now-mag_tick) >= 10) {
       mag_tick = now;
@@ -155,9 +165,22 @@ void sensor_test_run(void) {
       if (result < 0) ++mag_errors;
       if (result == 2) ++mag_overflows;
       if (result > 0) {
+        north_mag(&north, &sample, HAL_GetTick());
         printf("MAG,%" PRIu32 ",%" PRIu32 ",%d,%d,%d,%u\r\n", now, mag_sequence++,
                sample.xyz[0], sample.xyz[1], sample.xyz[2], sample.status);
       }
+    }
+    now = HAL_GetTick();
+    imu_port_display(north_display(&north, now));
+    if ((uint32_t)(now-fusion_tick) >= 100) {
+      fusion_tick = now;
+      printf("FUSE,%" PRIu32 ",%s,%" PRId32 ",%" PRId32 ",%" PRId32 ",%u,%u\r\n",
+             now, north_state_name(north_state(&north, now)),
+             north.aligned ? (int32_t)(north.gyro*1000) : INT32_MIN,
+             north.compass_valid && (uint32_t)(now-north.mag_tick) <= 100 ?
+                 (int32_t)(north.compass*1000) : INT32_MIN,
+             north.aligned ? (int32_t)(north.fused*1000) : INT32_MIN,
+             north.sector, (unsigned)(north.mag_used && (uint32_t)(now-north.mag_tick) <= 100));
     }
     if ((uint32_t)(now-last) >= 1000) {
       const char *state = received == prior_rx ? "NO_DATA" :
