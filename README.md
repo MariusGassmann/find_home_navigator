@@ -1,18 +1,13 @@
 # Find Home navigator
 
-STM32 NUCLEO-L476RG with ETH PBL Shield rev 1.2 and LSM6DSV16BX IMU.
-Default firmware streams IMU, GNSS reception and raw QMC5883P compass measurements; see
-[wiring and capture steps](docs/gnss_test.md). The selectable IMU mode streams
-measurements and drives a fixed-direction LED pointer with 3D gyro/gravity heading.
-Compass calibration and validation: [instructions](docs/compass_calibration.md).
-Tilt-compensated magnetic heading is available in the laptop viewer; see
-[heading checks](docs/compass_heading.md). Home navigation and sleep remain to be implemented.
+STM32 NUCLEO-L476RG, ETH PBL Shield rev 1.2, LSM6DSV16BX IMU and HGLRC
+M100-5883 GNSS/QMC5883P compass. Sensors, calibration, visualization and the
+LED matrix diagnostic work. Home capture, navigation and sleep/wake are next.
 
 ## Build and flash
 
-Use the existing STM32 Run & Debug configuration in VS Code, with CMake configure
-and build presets set to `Debug`. The legacy target name `LAB04_I2C` is retained
-for compatibility. Command-line equivalent:
+Use the existing STM32 Run & Debug GUI with the `Debug` preset. The course target
+name `LAB04_I2C` stays unchanged. Terminal equivalent:
 
 ```powershell
 cmake --preset Debug
@@ -20,71 +15,61 @@ cmake --build --preset Debug
 STM32_Programmer_CLI -c port=SWD -d build/Debug/LAB04_I2C.elf -v -rst
 ```
 
-## Laptop viewer
+## Viewer
 
-For the IMU/matrix mode, configure `-DFIND_HOME_SENSOR_TEST=OFF` and rebuild.
-For the default combined sensor mode, add `--compass` to the viewer command
-(USB 460800 baud); no extra Python packages are needed. Close `sensor_capture.py`
-first: a single process must own COM3. Both streams are saved in the same log.
+From the project root, using the existing Conda environment:
 
 ```powershell
-conda create -n find-home python=3.12 pip -y
 conda activate find-home
 python -m pip install -r tools/requirements.txt
-python tools/imu_viewer.py --port COM3 --accel-cal calibration/imu_accel.json --log captures/imu.txt
+python tools/imu_viewer.py --port COM3 --compass --accel-cal calibration/imu_accel.json --mag-cal calibration/mag.json --mag-axes=y,x,-z --log captures/session.txt
 ```
 
-Close other serial monitors before opening COM3. Rediscover the port with
-`python -m serial.tools.list_ports -v` if needed. Place the board level and still,
-press Enter in the viewer or on the shield, and hold still for two seconds.
-+X points toward the POTI. Initial yaw is zero, not geographic north.
-In IMU/matrix mode, the board blinks its center LEDs while calibrating, then shows a green head toward
-the starting direction and a red tail opposite. Normal pickup and tilt are allowed.
-The pointer goes dark when the POTI points almost vertically, then resumes when
-lowered. All red means clipping, lost samples or a hardware error; reference again.
-Press `T` in the live viewer for a 4.8-second LED pixel/color test.
+Close other serial monitors first. Press board RESET, hold level and still,
+press Enter, and wait two seconds for the gyro reference. The 3D board shows
+relative gyro/gravity orientation; the compass dial shows tilt-compensated
+magnetic heading. XYZ field plots remain in sensor axes. Board +X points toward
+POTI. See [hardware/frames](docs/hardware.md) and [heading](docs/compass_heading.md).
 
-| Option | Effect |
-| --- | --- |
-| `--compass` | Add raw XYZ compass plots; default USB 460800, uncalibrated sensor frame |
-| `--level-only` | Use the original 5-degree held-level compass baseline |
-| `--mag-axes=y,x,-z` | Enable magnetic heading with the inferred compass-to-board transform |
-| `--mag-cal calibration/mag.json` | Apply validated compass calibration to plots; requires `--compass` |
-| `--baud 115200` | Override serial speed when needed |
-| Default | Gyro integration, initial bias subtraction, gravity correction |
-| `--gyro-only` | Disable gravity correction; keep bias subtraction |
-| `--no-bias` | Disable gyro bias subtraction; combine with other flags |
-| `--accel-cal calibration/imu_accel.json` | Apply this board's accelerometer calibration; otherwise off |
-| `--axes=y,-x,z` | Sensor-to-board transform; this is the default |
-| `--demo` instead of `--port COM3` | Synthetic three-axis motion; no hardware |
-| `--replay captures/imu.txt` instead of `--port COM3` | Replay raw data; supply the original correction flags |
-| `--log captures/imu.txt` | Save raw packets, settings and reference events; existing files require `--overwrite` |
-| `--headless --seconds 60` | Timed capture without a window; shield Enter still works |
+Useful options: `--gyro-only` disables gravity correction; `--no-bias` disables
+gyro bias subtraction; omit `--accel-cal` to compare raw acceleration.
+`--demo` replaces the port with simulated IMU motion; `--replay captures/session.txt`
+replays a log with the same calibration/axes options. `--headless --seconds 60`
+records without a window. Escape closes the viewer. Logs remain raw and include
+settings; a summary JSON is written on close. Existing logs require an explicit
+`--overwrite`, or choose a new name.
 
-Escape closes the viewer. Logging also saves `<name>.summary.json` on close.
-See [IMU details](docs/imu_test.md) and [calibration](docs/imu_calibration_results.md).
+## Capture and calibration
 
-## Code and checks
+```powershell
+python tools/sensor_capture.py --port COM3 --seconds 0 --log captures/sensors.txt
+python tools/sensor_analysis.py captures/sensors.txt --output captures/analysis
+```
 
-- `Core/Src/imu.c`: portable sensor driver.
-- `Core/Src/imu_test.c`: SPI2 transport, button and serial diagnostic.
-- `Core/Src/heading.c`: level bias calibration, 3D attitude and pointer sector.
-- `Core/Src/matrix.c`: eight pointer patterns and shield shift-register encoding.
-- `Core/Src/gnss.c`: bounded NMEA/GGA parser and position freshness checks.
-- `Core/Src/mag.c`: QMC5883P initialization, fresh samples and overflow detection.
-- `Core/Src/sensor_test.c`: interrupt-driven GNSS UART and compass bench test.
-- `tools/sensor_analysis.py`: raw-protocol diagnostics and GNSS/compass plots.
-- `tools/imu_model.py`: coordinate transform and attitude estimation.
-- `tools/imu_viewer.py`: serial, simulation/replay, logging and 3D view.
-- `tools/imu_calibration.py`: six-pose calibration extraction and fitting.
-- `tests/`: synthetic attitude/calibration tests and ARM driver emulation.
+RESET after connecting; Ctrl+C stops. The script logs everything and prints only
+startup/status lines. GNSS reception needs open sky; IMU/compass tests need no fix.
+[Calibration instructions](docs/compass_calibration.md) and the measured
+[accelerometer results](docs/imu_calibration_results.md) describe the saved data.
+Keep `calibration/` versioned. Raw captures and build outputs stay local.
+
+## Firmware modules and checks
+
+`Core/Src/imu.c`, `mag.c`, `gnss.c`, `heading.c` and `matrix.c` contain the reusable
+drivers/math. `imu_port.c` owns shield SPI2. `sensor_test.c` is the current combined
+bench loop. `imu_test.c` retains the standalone onboard IMU/LED pointer test;
+select it with `cmake --preset Debug -DFIND_HOME_SENSOR_TEST=OFF`, then rebuild.
+Its viewer connection is 115200 baud without `--compass`; T walks all LED pixels.
+Restore the combined bench with `-DFIND_HOME_SENSOR_TEST=ON` and rebuild.
 
 ```powershell
 python -m pip install -r tests/requirements.txt
-python -m unittest discover -s tests -v
+python -m unittest discover -s tests -q
 python tests/run_driver_test.py
 ```
 
-The ARM test requires `arm-none-eabi-gcc`, `objcopy` and `nm` on PATH. Firmware
-builds require CMake, Ninja and the STM32 ARM toolchain. Calibration coefficients
-and the calibration report are versioned; local raw captures and build outputs are ignored.
+Python tests cover estimator, calibration, protocol and capture behaviour. ARM
+emulation tests the production C drivers, parsers and matrix/heading code; it
+requires the ARM GCC tools on PATH. HAL/CMSIS, CubeMX configuration and generated
+sources are retained. The inherited linker emits an RWX-segment warning.
+The assignment PDF is not present; course requirements still need checking
+before the final application/submission.

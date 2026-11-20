@@ -58,27 +58,6 @@ static void uart_init(void) {
   SET_BIT(USART3->CR1, USART_CR1_RXNEIE | USART_CR1_PEIE);
 }
 
-static void identify_compass(void) {
-  printf("# I2C scan (7-bit addresses):");
-  for (unsigned address = 8; address < 120; ++address)
-    if (HAL_I2C_IsDeviceReady(&hi2c1, (uint16_t)(address << 1), 1, 3) == HAL_OK)
-      printf(" %02x", address);
-  printf("\r\n");
-  const struct { uint8_t address, reg, expected; const char *name; } probes[] = {
-    {0x0d, 0x0d, 0xff, "QMC5883L"}, {0x2c, 0x00, 0x80, "QMC5883P"}
-  };
-  for (unsigned i = 0; i < sizeof probes/sizeof probes[0]; ++i) {
-    uint8_t id[2];
-    bool ok = true;
-    for (unsigned n = 0; n < 2; ++n)
-      if (HAL_I2C_Mem_Read(&hi2c1, probes[i].address << 1, probes[i].reg,
-                          I2C_MEMADD_SIZE_8BIT, &id[n], 1, 10) != HAL_OK) ok = false;
-    if (ok) printf("# MAG %s candidate address=%02x reg=%02x id=%02x/%02x match=%u; read-only test\r\n",
-                   probes[i].name, probes[i].address, probes[i].reg, id[0], id[1],
-                   (unsigned)(id[0] == probes[i].expected && id[1] == probes[i].expected));
-  }
-}
-
 static bool mag_read_reg(void *context, uint8_t reg, uint8_t *data, uint16_t size) {
   return HAL_I2C_Mem_Read(context, 0x2c << 1, reg, I2C_MEMADD_SIZE_8BIT, data, size, 5) == HAL_OK;
 }
@@ -93,13 +72,6 @@ static bool start_compass(const mag_bus_t *bus) {
   if (ready) printf("# MAG init=1 address=2c CTRL1=05 CTRL2=08 AXIS=06; raw XYZ active\r\n");
   else printf("# MAG init=0 op=%c reg=%02x expected=%02x actual=%02x; no compass samples\r\n",
               check.operation, check.reg, check.expected, check.actual);
-  const uint8_t registers[] = {0, 0x0a, 0x0b};
-  for (unsigned i = 0; i < sizeof registers; ++i) {
-    uint8_t value = 0;
-    if (bus->read(bus->context, registers[i], &value, 1))
-      printf("# MAG snapshot reg=%02x actual=%02x\r\n", registers[i], value);
-    else printf("# MAG snapshot reg=%02x read failed\r\n", registers[i]);
-  }
   return ready;
 }
 
@@ -121,8 +93,7 @@ void sensor_test_run(void) {
   huart2.Init.BaudRate = 460800;
   if (HAL_UART_Init(&huart2) != HAL_OK) Error_Handler();
   printf("# SENSOR v5: GPS 115200, USB 460800; RX hex + MAG + IMU raw sensor XYZ\r\n");
-  printf("# Commands: Enter/r IMU reference; i ID scan; m compass initialization\r\n");
-  identify_compass(); /* Initial scan before UART reception starts. */
+  printf("# Enter/r: IMU reference\r\n");
   mag_bus_t bus = {&hi2c1, mag_read_reg, mag_write_reg, HAL_Delay};
   bool mag_ready = start_compass(&bus);
   imu_bus_t imu_bus = imu_port_init();
@@ -157,10 +128,6 @@ void sensor_test_run(void) {
     uint8_t command;
     if (HAL_UART_Receive(&huart2, &command, 1, 0) == HAL_OK) {
       if (command == 'r') ++reference;
-      if (command == 'i') identify_compass();
-      if (command == 'm') {
-        mag_ready = start_compass(&bus);
-      }
     }
     uint32_t now = HAL_GetTick();
     GPIO_PinState pressed = HAL_GPIO_ReadPin(BTN_ENTER_GPIO_Port, BTN_ENTER_Pin);

@@ -3,14 +3,13 @@ from collections import deque
 import math
 import time
 from imu_model import mounting
-from magnetic_heading import level_heading, tilt_heading
+from magnetic_heading import tilt_heading
 
 
 class Compass:
-    def __init__(self, calibration=None, axes=None, tilt_comp=False):
+    def __init__(self, calibration=None, axes=None):
         self.calibration = calibration
         self.axes = axes
-        self.tilt_comp = tilt_comp
         self.transform = mounting(axes) if axes else None
         self.tick = None
         self.usable = False
@@ -79,9 +78,7 @@ class Compass:
                                    (self.tick-imu_tick) & 0xffffffff) > 100:
             return None, 'IMU and compass samples not synchronized'
         field = self.transform(self.points[-1])
-        if self.tilt_comp:
-            return tilt_heading(field, accel, self.calibration['field_uT'], up)
-        return level_heading(field, accel, self.calibration['field_uT'])
+        return tilt_heading(field, accel, self.calibration['field_uT'], up)
 
     def draw_heading(self, canvas, accel, imu_tick, imu_age, up=None):
         heading, reason = self.heading(accel, imu_tick, imu_age, up)

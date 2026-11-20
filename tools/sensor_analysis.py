@@ -197,9 +197,6 @@ def summarize(s):
         result['capture_end'] = s.capture_end
     if not s.counts['raw_bytes']:
         result['reception_note'] = 'No raw UART records: rejected sentences cannot be diagnosed from this log.'
-    elif any(key.startswith('ubx_') and re.fullmatch(r'ubx_[0-9a-f]{2}_[0-9a-f]{2}', key)
-             for key in s.counts):
-        result['reception_note'] = 'Binary UBX present; the firmware NMEA-only parser may count binary data as bad lines.'
     if positions:
         center, points = local_points(positions)
         radii = sorted(math.hypot(x, y) for x, y in points)

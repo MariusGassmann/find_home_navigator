@@ -1,1 +1,2 @@
+-r ../tools/requirements.txt
 unicorn==2.1.4

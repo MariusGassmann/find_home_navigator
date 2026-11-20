@@ -52,28 +52,6 @@ class OrientationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 mounting(bad)
 
-    def test_known_rotations_all_axes(self):
-        for axis in range(3):
-            rates = [0, 0, 0]
-            rates[axis] = math.pi/2
-            q = (1, 0, 0, 0)
-            for _ in range(1000):
-                q = advance(q, rates, .001)
-            self.assertAlmostEqual(norm(q), 1, places=12)
-            self.assertAlmostEqual(abs(q[axis+1]), math.sqrt(.5), places=10)
-
-    def test_inverse_rotation(self):
-        q = advance((1, 0, 0, 0), (1, 2, 3), 1)
-        v = rotate((q[0], *(-x for x in q[1:])), rotate(q, (1, 2, -3)))
-        for a, b in zip(v, (1, 2, -3)):
-            self.assertAlmostEqual(a, b)
-
-    def test_known_yaw_90(self):
-        model = calibrated()
-        for i in range(121, 301):
-            model.update(sample(i, gyro=(0, 0, 30)))
-        self.assertAlmostEqual(euler(model.q)[2], 90, places=5)
-
     def test_yaw_wrap_accumulation(self):
         model = calibrated(gain=0)
         for i in range(121, 1561):

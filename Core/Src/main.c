@@ -1,7 +1,7 @@
 /* USER CODE BEGIN Header */
 /**
  * @file main.c
- * @brief Find Home IMU diagnostics
+ * @brief Find Home sensor diagnostics
  * @author Philipp Schilk, 2023
  */
 /* USER CODE END Header */
@@ -66,8 +66,7 @@ int main(void)
 
   /* MCU Configuration--------------------------------------------------------*/
 
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */tests  HAL_Init();
 
   /* USER CODE BEGIN Init */
 

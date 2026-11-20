@@ -1,4 +1,4 @@
-"""Run from the repository root; see docs/imu_test.md for hardware checks."""
+"""IMU/compass viewer with raw logging, simulation and replay. See README.md."""
 import argparse
 import json
 from pathlib import Path
@@ -52,8 +52,7 @@ class Session:
         if getattr(args, 'mag_cal', None):
             from mag_calibration import load
             magnetic_cal = load(args.mag_cal)
-        self.compass = Compass(magnetic_cal, getattr(args, 'mag_axes', None),
-                               tilt_comp=not getattr(args, 'level_only', False))
+        self.compass = Compass(magnetic_cal, getattr(args, 'mag_axes', None))
         self.demo = Demo() if args.demo else None
         self.replay = None
         self.log = None
@@ -143,7 +142,6 @@ class Session:
                     accel_offset_g=m.accel_offset, accel_scale=m.accel_scale,
                     mag_axes=self.compass.axes, magnetic_heading_deg=magnetic_heading,
                     magnetic_heading_status=magnetic_status,
-                    tilt_compensated=self.compass.tilt_comp,
                     compass_samples=self.compass.samples, compass_overflows=self.compass.overflows,
                     status=m.message)
 
@@ -165,7 +163,7 @@ def gui(session):
     import tkinter as tk
     from tkinter import ttk
     root = tk.Tk()
-    root.title('Find Home — IMU bench | Enter = level reference')
+    root.title('Find Home — sensor bench | Enter = level reference')
     root.geometry('1100x900' if session.compass.axes else '1000x760')
     controls = ttk.Frame(root, padding=10)
     controls.pack(fill='x')
@@ -268,7 +266,6 @@ def main():
     source.add_argument('--replay', help='Replay a raw capture; use its original --axes/mode flags')
     parser.add_argument('--axes', default=BOARD_AXES, help='Signed sensor axes for board X,Y,Z; default: %(default)s. Use --axes=... for a leading minus.')
     parser.add_argument('--compass', action='store_true', help='Show raw compass alongside IMU; USB defaults to 460800')
-    parser.add_argument('--level-only', action='store_true', help='Use original held-level compass baseline instead of tilt compensation')
     parser.add_argument('--mag-axes', help='Enable magnetic heading with signed sensor axes for board XYZ; inferred mounting: y,x,-z')
     parser.add_argument('--mag-cal', help='Apply validated sensor-frame compass calibration JSON')
     parser.add_argument('--baud', type=int, help='Override USB serial baud rate')
@@ -282,8 +279,6 @@ def main():
     args = parser.parse_args()
     if args.log and Path(args.log).exists() and not args.overwrite:
         parser.error('Log already exists; choose a new filename or use --overwrite')
-    if args.level_only and not args.mag_axes:
-        parser.error('--level-only requires --mag-axes')
     if args.mag_axes and not (args.compass and args.mag_cal):
         parser.error('--mag-axes requires --compass and --mag-cal')
     if args.mag_cal and not args.compass:

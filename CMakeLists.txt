@@ -11,7 +11,7 @@ endif()
 # Keep the CubeMX target name for existing VS Code debug configurations.
 set(CMAKE_PROJECT_NAME LAB04_I2C)
 project(${CMAKE_PROJECT_NAME} LANGUAGES C ASM)
-option(FIND_HOME_SENSOR_TEST "Run Combined IMU/GNSS/compass diagnostics instead of IMU/matrix test" ON)
+option(FIND_HOME_SENSOR_TEST "Run combined sensors; OFF selects the IMU/LED diagnostic" ON)
 add_executable(${PROJECT_NAME})
 add_subdirectory(cmake/stm32cubemx)
 

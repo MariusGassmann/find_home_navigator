@@ -30,7 +30,7 @@ samples share similar conditions. Repeatability over temperature and other
 orientations remains unmeasured. Use these coefficients only for this board.
 
 ```powershell
-python tools/imu_viewer.py --port COM3 --accel-cal calibration/imu_accel.json --log captures/calibrated.txt
+python tools/imu_viewer.py --port COM3 --compass --accel-cal calibration/imu_accel.json --log captures/calibrated.txt
 python tools/imu_calibration.py captures/six-poses.txt --output calibration/imu_accel.json --report calibration/imu_accel_report.json
 ```
 

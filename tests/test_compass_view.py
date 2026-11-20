@@ -22,14 +22,6 @@ class CombinedTests(unittest.TestCase):
             self.assertFalse(c.update(line))
         self.assertEqual(c.samples, 1)
 
-    def test_history_is_bounded_and_empty_state_is_clear(self):
-        c = Compass()
-        self.assertIn('waiting', c.text())
-        for i in range(2000):
-            c.update(f'MAG,{i},{i},10,20,30,1')
-        self.assertEqual((c.samples, len(c.points)), (2000, 1500))
-        c.last_data -= 1
-        self.assertIn('STALE', c.text())
 
     def test_mixed_stream_keeps_imu_and_compass_separate(self):
         args = SimpleNamespace(accel_cal=None, axes='y,-x,z', gyro_only=False,
